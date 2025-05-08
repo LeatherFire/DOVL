@@ -3,9 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import Annotated
-from datetime import datetime, timezone # <<< BU SATIRI EKLEYİN
+from datetime import datetime, timezone
 from pymongo.errors import DuplicateKeyError
 import pymongo
+from bson import ObjectId # ObjectId'i kontrol etmek için import edebiliriz
 
 from database import get_db_dependency
 from models.user_models import UserCreate, UserPublic, UserLogin
@@ -31,10 +32,9 @@ async def register_user(user_data: UserCreate, db: DBDep):
     hashed_password = get_password_hash(user_data.password)
 
     user_db_data = user_data.model_dump(exclude={"password"})
-    user_db_data["hashed_password"] = hashed_password # hashlenmiş şifre alanının adını kontrol et
+    user_db_data["hashed_password"] = hashed_password
     user_db_data["role"] = "user"
     user_db_data["isActive"] = True
-    # datetime ve timezone import edildiği için artık hata vermemeli
     user_db_data["createdAt"] = datetime.now(timezone.utc)
     user_db_data["updatedAt"] = datetime.now(timezone.utc)
     user_db_data["addresses"] = []
@@ -45,12 +45,21 @@ async def register_user(user_data: UserCreate, db: DBDep):
 
     try:
         result = await users_collection.insert_one(user_db_data)
-        created_user = await users_collection.find_one({"_id": result.inserted_id})
+        # Veritabanından kullanıcıyı tekrar çek
+        created_user_raw = await users_collection.find_one({"_id": result.inserted_id})
 
-        if not created_user:
+        if not created_user_raw:
              raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Kullanıcı kaydedildi ancak getirilemedi.")
 
-        return UserPublic.model_validate(created_user)
+        # ----- Pydantic Doğrulama Hatası İçin Düzeltme -----
+        # Pydantic modeline göndermeden önce _id'yi string'e çevir
+        created_user_for_validation = created_user_raw.copy() # Orijinal dict'i bozmamak için kopyala
+        if '_id' in created_user_for_validation and isinstance(created_user_for_validation['_id'], ObjectId):
+            created_user_for_validation['_id'] = str(created_user_for_validation['_id'])
+        # ----- Düzeltme Sonu -----
+
+        # Düzenlenmiş dict ile modeli doğrula
+        return UserPublic.model_validate(created_user_for_validation) # `model_validate` kullanıyoruz
 
     except DuplicateKeyError:
          raise HTTPException(
@@ -58,11 +67,15 @@ async def register_user(user_data: UserCreate, db: DBDep):
             detail="Bu e-posta adresi zaten kayıtlı."
         )
     except Exception as e:
-        print(f"Kayıt hatası: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Kullanıcı kaydı sırasında bir hata oluştu."
-        )
+        print(f"Kayıt hatası: {e}") # Genel hatayı logla
+        # Pydantic ValidationError hatasını da yakalayabiliriz ama şimdilik genel hata
+        if "validation error" in str(e).lower(): # Basit kontrol
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Veri doğrulama hatası: {e}")
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Kullanıcı kaydı sırasında bir sunucu hatası oluştu."
+            )
 
 
 @router.post("/login", response_model=Token)
@@ -72,17 +85,28 @@ async def login_for_access_token(
 ):
     """Kullanıcı girişi yapar ve access token döndürür."""
     users_collection = db["users"]
-    # .get("hashed_password") kullanmak yerine doğrudan alan adı daha iyi olabilir,
-    # ama önce veritabanı modelini kontrol etmek lazım. Şimdilik get ile bırakalım.
     user = await users_collection.find_one({"email": form_data.username})
 
-    # user varsa ve şifre varsa kontrol et
-    if not user or "hashed_password" not in user or not verify_password(form_data.password, user["hashed_password"]):
+    # ----- bcrypt/AttributeError Hatası İçin Kontrol -----
+    # verify_password fonksiyonu içinde bir sorun varsa burada hata alabiliriz
+    # Bu genellikle bcrypt kütüphanesinin doğru kurulmamasından kaynaklanır
+    try:
+        password_field = user.get("hashed_password") if user else None
+        if not user or not password_field or not verify_password(form_data.password, password_field):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="E-posta veya şifre hatalı.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except AttributeError as ae:
+        if "'bcrypt'" in str(ae): # Bcrypt hatasıysa daha açıklayıcı log
+             print("\n\n *** Bcrypt/Passlib Hatası: 'bcrypt' modülü ile ilgili bir sorun var. 'pip install bcrypt' komutunu çalıştırdınız mı? ***\n\n")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="E-posta veya şifre hatalı.",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Şifre doğrulama sırasında bir hata oluştu."
         )
+    # ----- Kontrol Sonu -----
+
 
     if not user.get("isActive", False):
         raise HTTPException(
@@ -101,7 +125,6 @@ async def login_for_access_token(
     try:
         await users_collection.update_one(
             {"_id": user["_id"]},
-            # timezone import edildiği için artık hata vermemeli
             {"$set": {"lastLogin": datetime.now(timezone.utc)}}
         )
     except Exception as e:
