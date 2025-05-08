@@ -38,5 +38,5 @@ if settings.JWT_SECRET == "default_secret":
 # Bu, pytest tarafından ayarlanabilir veya başka bir ortam değişkeni ile yapılabilir.
 # Şimdilik basit bir kontrol yapalım: Eğer TEST_DB_NAME farklıysa test ortamı kabul edelim.
 # Daha iyisi: pytest.ini veya ortam değişkeni kullanmak.
-IS_TESTING: bool = settings.DB_NAME != settings.TEST_DB_NAME and settings.TEST_DB_NAME is not None
+IS_TESTING: bool = False
 print(f"Test Ortamı Aktif mi: {IS_TESTING}")

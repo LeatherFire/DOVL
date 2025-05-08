@@ -1,11 +1,17 @@
 "use client";
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { getCart, createOrder } from '../../utils/api';
 
 export default function CheckoutPage() {
-  const [cart, setCart] = useState([]);
+  const router = useRouter();
+  const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checkoutStep, setCheckoutStep] = useState(1); // 1: Teslimat, 2: Ödeme, 3: Onay
+  const [orderNumber, setOrderNumber] = useState('');
+  const [orderError, setOrderError] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   
   // Form verileri
   const [formData, setFormData] = useState({
@@ -15,7 +21,7 @@ export default function CheckoutPage() {
     email: '',
     phone: '',
     address: '',
-    city: '',
+    city: 'İstanbul',
     district: '',
     postalCode: '',
     // Fatura bilgileri
@@ -23,7 +29,7 @@ export default function CheckoutPage() {
     billingFirstName: '',
     billingLastName: '',
     billingAddress: '',
-    billingCity: '',
+    billingCity: 'İstanbul',
     billingDistrict: '',
     billingPostalCode: '',
     // Ödeme bilgileri
@@ -40,53 +46,27 @@ export default function CheckoutPage() {
   // Form hataları
   const [formErrors, setFormErrors] = useState({});
   
-  // Sepet verilerini yükleme (gerçek projede API'dan veya local storage'dan alınacak)
+  // Sepet verilerini yükleme
   useEffect(() => {
-    // Mock sepet verileri - sepet sayfasıyla aynı
-    const mockCart = [
-      {
-        id: 'bluz-1',
-        name: 'Sarı Basic Bluz',
-        price: 379.90,
-        salePrice: 189.90,
-        image: 'https://placehold.co/800x1100/FFEA00/1A1A1A/png?text=DOVL',
-        color: 'Sarı',
-        size: 'M',
-        quantity: 1,
-        maxQuantity: 5
-      },
-      {
-        id: 'elbise-3',
-        name: 'Siyah Mini Elbise',
-        price: 799.90,
-        salePrice: null,
-        image: 'https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL',
-        color: 'Siyah',
-        size: 'S',
-        quantity: 2,
-        maxQuantity: 3
+    const loadCart = async () => {
+      setLoading(true);
+      try {
+        const response = await getCart();
+        setCart(response.data);
+        
+        // Eğer sepet boşsa ana sayfaya yönlendir
+        if (!response.data || !response.data.items || response.data.items.length === 0) {
+          router.push('/sepet');
+        }
+      } catch (error) {
+        console.error("Sepet yüklenirken hata:", error);
+      } finally {
+        setLoading(false);
       }
-    ];
-    
-    // Mock kupon
-    const mockCoupon = {
-      code: 'DOVL20',
-      discount: 20,
-      type: 'percentage'
     };
     
-    // API çağrısını simüle etmek için setTimeout kullanıyoruz
-    setTimeout(() => {
-      setCart({
-        items: mockCart,
-        coupon: mockCoupon,
-        subtotal: mockCart.reduce((total, item) => total + (item.salePrice || item.price) * item.quantity, 0),
-        shipping: 0, // 500 TL üzeri ücretsiz kargo
-        tax: mockCart.reduce((total, item) => total + (item.salePrice || item.price) * item.quantity, 0) * 0.18
-      });
-      setLoading(false);
-    }, 500);
-  }, []);
+    loadCart();
+  }, [router]);
   
   // Form verilerini güncelleme
   const handleInputChange = (e) => {
@@ -117,6 +97,35 @@ export default function CheckoutPage() {
         [name]: ''
       }));
     }
+  };
+  
+  // Kart numarasını formatlama
+  const formatCardNumber = (value) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    const matches = v.match(/\d{4,16}/g);
+    const match = matches && matches[0] || '';
+    const parts = [];
+    
+    for (let i = 0, len = match.length; i < len; i += 4) {
+      parts.push(match.substring(i, i + 4));
+    }
+    
+    if (parts.length) {
+      return parts.join(' ');
+    } else {
+      return value;
+    }
+  };
+  
+  // Son kullanma tarihini formatlama
+  const formatExpiry = (value) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    
+    if (v.length >= 3) {
+      return `${v.substring(0, 2)}/${v.substring(2, 4)}`;
+    }
+    
+    return value;
   };
   
   // Form doğrulama
@@ -179,75 +188,69 @@ export default function CheckoutPage() {
   };
   
   // Siparişi tamamlama
-  const completeOrder = () => {
-    if (validateForm()) {
-      // Gerçek projede API'ya istek yapılacak
-      // Şimdilik mock bir işlem yapıyoruz
-      setCheckoutStep(3); // Onay adımına geç
-      window.scrollTo(0, 0);
-    }
-  };
-  
-  // Kart numarasını formatlama
-  const formatCardNumber = (value) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = matches && matches[0] || '';
-    const parts = [];
+  const completeOrder = async () => {
+    if (!validateForm()) return;
     
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
+    setIsProcessing(true);
+    setOrderError('');
     
-    if (parts.length) {
-      return parts.join(' ');
-    } else {
-      return value;
-    }
-  };
-  
-  // Son kullanma tarihini formatlama
-  const formatExpiry = (value) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    
-    if (v.length >= 3) {
-      return `${v.substring(0, 2)}/${v.substring(2, 4)}`;
-    }
-    
-    return value;
-  };
-  
-  // Fiyat hesaplamaları
-  const calculateTotal = () => {
-    if (!cart.subtotal) return 0;
-    
-    let total = cart.subtotal;
-    
-    // Kupon indirimi
-    if (cart.coupon) {
-      const couponDiscount = cart.coupon.type === 'percentage' 
-        ? cart.subtotal * (cart.coupon.discount / 100) 
-        : cart.coupon.discount;
+    try {
+      // API'ye gönderilecek sipariş verisini oluştur
+      const orderData = {
+        shippingAddress: {
+          title: 'Teslimat Adresi',
+          fullName: `${formData.firstName} ${formData.lastName}`,
+          address: formData.address,
+          city: formData.city,
+          district: formData.district,
+          postalCode: formData.postalCode,
+          country: 'Türkiye',
+          phone: formData.phone
+        },
+        billingAddress: formData.sameAsShipping ? 
+          {
+            title: 'Fatura Adresi',
+            fullName: `${formData.firstName} ${formData.lastName}`,
+            address: formData.address,
+            city: formData.city,
+            district: formData.district,
+            postalCode: formData.postalCode,
+            country: 'Türkiye',
+            phone: formData.phone
+          } : 
+          {
+            title: 'Fatura Adresi',
+            fullName: `${formData.billingFirstName} ${formData.billingLastName}`,
+            address: formData.billingAddress,
+            city: formData.billingCity,
+            district: formData.billingDistrict,
+            postalCode: formData.billingPostalCode,
+            country: 'Türkiye',
+            phone: formData.phone
+          },
+        paymentMethod: 'credit_card',
+        notes: formData.notes,
+        campaignCode: cart.campaign ? cart.campaign.code : undefined
+      };
       
-      total -= couponDiscount;
+      // Sipariş oluştur
+      const response = await createOrder(orderData);
+      
+      // Başarılı ise sipariş numarasını kaydet ve onay adımına geç
+      if (response.success) {
+        setOrderNumber(response.data.orderNumber);
+        setCheckoutStep(3); // Onay adımına geç
+        window.scrollTo(0, 0);
+      } else {
+        throw new Error(response.message || 'Sipariş oluşturulurken bir hata oluştu');
+      }
+      
+    } catch (error) {
+      console.error("Sipariş oluşturulurken hata:", error);
+      setOrderError(error.message || 'Sipariş oluşturulurken bir hata oluştu, lütfen tekrar deneyiniz.');
+    } finally {
+      setIsProcessing(false);
     }
-    
-    // Kargo ücreti
-    total += cart.shipping;
-    
-    // Vergiler
-    total += cart.tax;
-    
-    return total;
-  };
-  
-  // Kupon indirimi hesaplama
-  const calculateCouponDiscount = () => {
-    if (!cart.subtotal || !cart.coupon) return 0;
-    
-    return cart.coupon.type === 'percentage' 
-      ? cart.subtotal * (cart.coupon.discount / 100) 
-      : cart.coupon.discount;
   };
   
   if (loading) {
@@ -260,7 +263,7 @@ export default function CheckoutPage() {
   }
   
   // Eğer sepet boşsa
-  if (!cart.items || cart.items.length === 0) {
+  if (!cart || !cart.items || cart.items.length === 0) {
     return (
       <div className="checkout-empty">
         <h1 className="page-title">ÖDEME</h1>
@@ -537,6 +540,12 @@ export default function CheckoutPage() {
               <div className="checkout-form">
                 <h2 className="form-section-title">Ödeme Bilgileri</h2>
                 
+                {orderError && (
+                  <div className="form-error" style={{marginBottom: '1rem', padding: '1rem', backgroundColor: '#ffebee'}}>
+                    {orderError}
+                  </div>
+                )}
+                
                 <div className="payment-methods">
                   <div className="payment-method active">
                     <div className="payment-method-header">
@@ -657,7 +666,7 @@ export default function CheckoutPage() {
                       onChange={handleInputChange}
                     />
                     <span className="checkbox-text">
-                      <Link href="/kosullar" className="terms-link">Şartlar ve Koşullar</Link> ı okudum ve kabul ediyorum.
+                      <Link href="/kosullar" className="terms-link">Şartlar ve Koşullar</Link>ı okudum ve kabul ediyorum.
                     </span>
                   </label>
                   {formErrors.termsAccepted && <div className="form-error">{formErrors.termsAccepted}</div>}
@@ -665,157 +674,164 @@ export default function CheckoutPage() {
                 
                 <div className="form-actions">
                   <button type="button" className="btn btn-outline" onClick={goToPreviousStep}>GERİ</button>
-                  <button type="button" className="btn btn-primary" onClick={completeOrder}>SİPARİŞİ TAMAMLA</button>
-                </div>
-              </div>
-            )}
-            
-            {/* Sipariş Onayı Adımı */}
-            {checkoutStep === 3 && (
-              <div className="order-confirmation">
-                <div className="order-success-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="48" height="48">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                
-                <h2 className="order-success-title">Siparişiniz Alındı!</h2>
-                <p className="order-success-message">
-                  Siparişiniz başarıyla oluşturuldu. Sipariş detaylarınız e-posta adresinize gönderildi.
-                </p>
-                
-                <div className="order-number">
-                  <span className="order-number-label">Sipariş Numarası:</span>
-                  <span className="order-number-value">DOVL{Math.floor(100000 + Math.random() * 900000)}</span>
-                </div>
-                
-                <div className="order-details">
-                  <h3 className="order-details-title">Sipariş Detayları</h3>
-                  
-                  <div className="order-detail-section">
-                    <h4 className="order-detail-section-title">Teslimat Bilgileri</h4>
-                    <p>
-                      {formData.firstName} {formData.lastName}<br />
-                      {formData.address}<br />
-                      {formData.district}, {formData.city}, {formData.postalCode || ''}<br />
-                      {formData.phone}<br />
-                      {formData.email}
-                    </p>
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    onClick={completeOrder}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? 'İŞLEM YAPILIYOR...' : 'SİPARİŞİ TAMAMLA'}
+                  </button>
                   </div>
-                  
-                  <div className="order-detail-section">
-                    <h4 className="order-detail-section-title">Fatura Bilgileri</h4>
-                    <p>
-                      {formData.sameAsShipping ? (
-                        <>
-                          {formData.firstName} {formData.lastName}<br />
-                          {formData.address}<br />
-                          {formData.district}, {formData.city}, {formData.postalCode || ''}
-                        </>
-                      ) : (
-                        <>
-                          {formData.billingFirstName} {formData.billingLastName}<br />
-                          {formData.billingAddress}<br />
-                          {formData.billingDistrict}, {formData.billingCity}, {formData.billingPostalCode || ''}
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  
-                  <div className="order-detail-section">
-                    <h4 className="order-detail-section-title">Ödeme Yöntemi</h4>
-                    <p>Kredi Kartı (•••• {formData.cardNumber.slice(-4)})</p>
-                  </div>
-                </div>
-                
-                <div className="order-confirmation-actions">
-                  <Link href="/" className="btn btn-outline">ANA SAYFAYA DÖN</Link>
-                  <Link href="/hesabim/siparisler" className="btn btn-primary">SİPARİŞLERİMİ GÖRÜNTÜLE</Link>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div className="checkout-sidebar">
-            <div className="order-summary">
-              <h2 className="summary-title">SİPARİŞ ÖZETİ</h2>
-              
-              <div className="summary-products">
-                {cart.items.map((item) => (
-                  <div key={item.id} className="summary-product">
-                    <div className="summary-product-image">
-                      <img src={item.image} alt={item.name} />
-                      <span className="summary-product-quantity">{item.quantity}</span>
-                    </div>
-                    <div className="summary-product-details">
-                      <div className="summary-product-name">{item.name}</div>
-                      <div className="summary-product-meta">
-                        <span className="summary-product-color">Renk: {item.color}</span>
-                        <span className="summary-product-size">Beden: {item.size}</span>
-                      </div>
-                    </div>
-                    <div className="summary-product-price">
-                      {((item.salePrice || item.price) * item.quantity).toFixed(2)}TL
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="summary-row">
-                <span className="summary-label">Ara Toplam</span>
-                <span className="summary-value">{cart.subtotal.toFixed(2)}TL</span>
-              </div>
-              
-              {cart.coupon && (
-                <div className="summary-row summary-discount">
-                  <span className="summary-label">İndirim ({cart.coupon.code})</span>
-                  <span className="summary-value">-{calculateCouponDiscount().toFixed(2)}TL</span>
-                </div>
-              )}
-              
-              <div className="summary-row">
-                <span className="summary-label">Kargo</span>
-                <span className="summary-value">
-                  {cart.shipping === 0 ? 'Ücretsiz' : `${cart.shipping.toFixed(2)}TL`}
-                </span>
-              </div>
-              
-              <div className="summary-row">
-                <span className="summary-label">KDV (18%)</span>
-                <span className="summary-value">{cart.tax.toFixed(2)}TL</span>
-              </div>
-              
-              <div className="summary-row summary-total">
-                <span className="summary-label">Toplam</span>
-                <span className="summary-value">{calculateTotal().toFixed(2)}TL</span>
-              </div>
-            </div>
-            
-            <div className="checkout-sidebar-info">
-              <div className="checkout-secure-payment">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                <p>Tüm ödemeleriniz 256-bit SSL sertifikası ile şifrelenmektedir.</p>
-              </div>
-              
-              <div className="checkout-shipping-info">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                </svg>
-                <p>500 TL ve üzeri siparişlerde kargo ücretsizdir.</p>
-              </div>
-              
-              <div className="checkout-support">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                </svg>
-                <p>Sorularınız için 7/24 müşteri hizmetleri: +90 212 123 45 67</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-  );
+             </div>
+           )}
+           
+           {/* Sipariş Onayı Adımı */}
+           {checkoutStep === 3 && (
+             <div className="order-confirmation">
+               <div className="order-success-icon">
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="48" height="48">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                 </svg>
+               </div>
+               
+               <h2 className="order-success-title">Siparişiniz Alındı!</h2>
+               <p className="order-success-message">
+                 Siparişiniz başarıyla oluşturuldu. Sipariş detaylarınız e-posta adresinize gönderildi.
+               </p>
+               
+               <div className="order-number">
+                 <span className="order-number-label">Sipariş Numarası:</span>
+                 <span className="order-number-value">{orderNumber}</span>
+               </div>
+               
+               <div className="order-details">
+                 <h3 className="order-details-title">Sipariş Detayları</h3>
+                 
+                 <div className="order-detail-section">
+                   <h4 className="order-detail-section-title">Teslimat Bilgileri</h4>
+                   <p>
+                     {formData.firstName} {formData.lastName}<br />
+                     {formData.address}<br />
+                     {formData.district}, {formData.city}, {formData.postalCode || ''}<br />
+                     {formData.phone}<br />
+                     {formData.email}
+                   </p>
+                 </div>
+                 
+                 <div className="order-detail-section">
+                   <h4 className="order-detail-section-title">Fatura Bilgileri</h4>
+                   <p>
+                     {formData.sameAsShipping ? (
+                       <>
+                         {formData.firstName} {formData.lastName}<br />
+                         {formData.address}<br />
+                         {formData.district}, {formData.city}, {formData.postalCode || ''}
+                       </>
+                     ) : (
+                       <>
+                         {formData.billingFirstName} {formData.billingLastName}<br />
+                         {formData.billingAddress}<br />
+                         {formData.billingDistrict}, {formData.billingCity}, {formData.billingPostalCode || ''}
+                       </>
+                     )}
+                   </p>
+                 </div>
+                 
+                 <div className="order-detail-section">
+                   <h4 className="order-detail-section-title">Ödeme Yöntemi</h4>
+                   <p>Kredi Kartı (•••• {formData.cardNumber.slice(-4)})</p>
+                 </div>
+               </div>
+               
+               <div className="order-confirmation-actions">
+                 <Link href="/" className="btn btn-outline">ANA SAYFAYA DÖN</Link>
+                 <Link href="/hesabim/siparisler" className="btn btn-primary">SİPARİŞLERİMİ GÖRÜNTÜLE</Link>
+               </div>
+             </div>
+           )}
+         </div>
+         
+         <div className="checkout-sidebar">
+           <div className="order-summary">
+             <h2 className="summary-title">SİPARİŞ ÖZETİ</h2>
+             
+             <div className="summary-products">
+               {cart.items.map((item) => (
+                 <div key={item.id} className="summary-product">
+                   <div className="summary-product-image">
+                     <img src={item.productImage || "https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL"} alt={item.productName} />
+                     <span className="summary-product-quantity">{item.quantity}</span>
+                   </div>
+                   <div className="summary-product-details">
+                     <div className="summary-product-name">{item.productName}</div>
+                     <div className="summary-product-meta">
+                       <span className="summary-product-color">Renk: {item.variant.colorName}</span>
+                       <span className="summary-product-size">Beden: {item.variant.size}</span>
+                     </div>
+                   </div>
+                   <div className="summary-product-price">
+                     {((item.price) * item.quantity).toFixed(2)}TL
+                   </div>
+                 </div>
+               ))}
+             </div>
+             
+             <div className="summary-row">
+               <span className="summary-label">Ara Toplam</span>
+               <span className="summary-value">{cart.subtotal.toFixed(2)}TL</span>
+             </div>
+             
+             {cart.campaign && (
+               <div className="summary-row summary-discount">
+                 <span className="summary-label">İndirim ({cart.campaign.code})</span>
+                 <span className="summary-value">-{cart.discountAmount.toFixed(2)}TL</span>
+               </div>
+             )}
+             
+             <div className="summary-row">
+               <span className="summary-label">Kargo</span>
+               <span className="summary-value">
+                 {cart.shippingCost === 0 ? 'Ücretsiz' : `${cart.shippingCost.toFixed(2)}TL`}
+               </span>
+             </div>
+             
+             <div className="summary-row">
+               <span className="summary-label">KDV (18%)</span>
+               <span className="summary-value">{cart.taxAmount.toFixed(2)}TL</span>
+             </div>
+             
+             <div className="summary-row summary-total">
+               <span className="summary-label">Toplam</span>
+               <span className="summary-value">{cart.total.toFixed(2)}TL</span>
+             </div>
+           </div>
+           
+           <div className="checkout-sidebar-info">
+             <div className="checkout-secure-payment">
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+               </svg>
+               <p>Tüm ödemeleriniz 256-bit SSL sertifikası ile şifrelenmektedir.</p>
+             </div>
+             
+             <div className="checkout-shipping-info">
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+               </svg>
+               <p>500 TL ve üzeri siparişlerde kargo ücretsizdir.</p>
+             </div>
+             
+             <div className="checkout-support">
+               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+               </svg>
+               <p>Sorularınız için 7/24 müşteri hizmetleri: +90 212 123 45 67</p>
+             </div>
+           </div>
+         </div>
+       </div>
+     </div>
+   </main>
+ );
 }
