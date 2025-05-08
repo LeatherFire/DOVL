@@ -1,5 +1,5 @@
 # backend/routers/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form  # Form'u ekleyin
 from fastapi.security import OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import Annotated
@@ -21,7 +21,7 @@ router = APIRouter()
 DBDep = Annotated[AsyncIOMotorDatabase, Depends(get_db_dependency)]
 
 @router.post("/forgot-password")
-async def forgot_password(email: str = Form(...), db: DBDep = Depends(get_db_dependency)):
+async def forgot_password(db: DBDep, email: str = Form(...)):
     """Kullanıcıya şifre sıfırlama bağlantısı gönderir."""
     users_collection = db["users"]
     user = await users_collection.find_one({"email": email})
@@ -53,9 +53,9 @@ async def forgot_password(email: str = Form(...), db: DBDep = Depends(get_db_dep
 
 @router.post("/reset-password")
 async def reset_password(
+    db: DBDep,
     token: str = Form(...),
-    password: str = Form(...),
-    db: DBDep = Depends(get_db_dependency)
+    password: str = Form(...)
 ):
     """Şifre sıfırlama token'ı ile yeni şifre belirler."""
     if len(password) < 6:
