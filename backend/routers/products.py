@@ -341,3 +341,63 @@ async def delete_product(product_id: str, db: DBDep, admin_user: AdminDep):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Silinecek ürün bulunamadı.")
 
     return None # 204 No Content yanıtı için body olmaz
+
+@router.get("/similar/{product_id}", response_model=ProductListResponse)
+async def get_similar_products(
+    product_id: str, 
+    db: DBDep,
+    limit: int = Query(4, ge=1, le=12)
+):
+    """Verilen ürüne benzer ürünleri getirir."""
+    try:
+        products_collection = db["products"]
+        
+        # Önce mevcut ürünü bul
+        if ObjectId.is_valid(product_id):
+            product = await products_collection.find_one({"_id": ObjectId(product_id)})
+        else:
+            product = await products_collection.find_one({"slug": product_id})
+            
+        if not product:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ürün bulunamadı.")
+        
+        # Benzer ürünleri bulmak için kategori ve mevcut ürün ID'sini kullan
+        category_id = product.get("category")
+        
+        # Benzer ürünleri bul: Aynı kategorideki, ancak farklı ID'ye sahip, aktif ürünler
+        filter_query = {
+            "category": category_id,
+            "_id": {"$ne": product["_id"] if "_id" in product else ObjectId(product_id)},
+            "isActive": True
+        }
+        
+        # Benzer ürünleri çek
+        similar_products_cursor = products_collection.find(filter_query).limit(limit)
+        similar_products_raw = await similar_products_cursor.to_list(length=limit)
+        
+        # ObjectId'leri string'e çevir
+        similar_products_validated = []
+        for prod_raw in similar_products_raw:
+            if '_id' in prod_raw:
+                prod_raw['_id'] = str(prod_raw['_id'])
+            if 'category' in prod_raw and prod_raw['category']:
+                if isinstance(prod_raw['category'], ObjectId):
+                    prod_raw['category'] = str(prod_raw['category'])
+            similar_products_validated.append(Product.model_validate(prod_raw))
+        
+        return ProductListResponse(
+            data=similar_products_validated,
+            pagination={
+                "total": len(similar_products_validated),
+                "page": 1,
+                "limit": limit,
+                "totalPages": 1
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Benzer ürünleri getirme hatası: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Benzer ürünler listelenirken bir hata oluştu.")
