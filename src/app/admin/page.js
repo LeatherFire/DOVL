@@ -1,3 +1,4 @@
+// src/app/admin/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -8,7 +9,6 @@ export default function AdminDashboard() {
     totalSales: 0,
     totalOrders: 0,
     totalProducts: 0,
-    totalUsers: 0,
     pendingOrders: 0,
     recentOrders: [],
     popularProducts: []
@@ -24,7 +24,6 @@ export default function AdminDashboard() {
         totalSales: 123750.90,
         totalOrders: 356,
         totalProducts: 127,
-        totalUsers: 245,
         pendingOrders: 18,
         recentOrders: [
           { id: 'ORD12345', customer: 'Ayşe Yılmaz', date: '2025-05-08', status: 'Tamamlandı', total: 1249.90 },
@@ -36,9 +35,7 @@ export default function AdminDashboard() {
         popularProducts: [
           { id: 'bluz-1', name: 'Sarı Basic Bluz', price: 189.90, sales: 42 },
           { id: 'elbise-3', name: 'Siyah Mini Elbise', price: 799.90, sales: 38 },
-          { id: 'pantolon-2', name: 'Bej Keten Pantolon', price: 609.90, sales: 35 },
-          { id: 'etek-1', name: 'Mavi Midi Etek', price: 529.90, sales: 29 },
-          { id: 'ceket-4', name: 'Siyah Blazer Ceket', price: 1159.90, sales: 26 }
+          { id: 'pantolon-2', name: 'Bej Keten Pantolon', price: 609.90, sales: 35 }
         ]
       });
       setIsLoading(false);
@@ -97,14 +94,14 @@ export default function AdminDashboard() {
         </div>
         
         <div className="admin-stat-card">
-          <div className="admin-stat-icon users-icon">
+          <div className="admin-stat-icon orders-icon" style={{ backgroundColor: 'rgba(255, 193, 7, 0.1)', color: '#ffc107' }}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           <div className="admin-stat-info">
-            <div className="admin-stat-value">{stats.totalUsers}</div>
-            <div className="admin-stat-label">Toplam Kullanıcı</div>
+            <div className="admin-stat-value">{stats.pendingOrders}</div>
+            <div className="admin-stat-label">Bekleyen Sipariş</div>
           </div>
         </div>
       </div>
@@ -159,55 +156,6 @@ export default function AdminDashboard() {
         </div>
       </div>
       
-      {/* Popüler Ürünler */}
-      <div className="admin-dashboard-row">
-        <div className="admin-panel admin-popular-products">
-          <div className="admin-panel-header">
-            <h2 className="admin-panel-title">Popüler Ürünler</h2>
-            <Link href="/admin/urunler" className="admin-panel-action">
-              Tümünü Gör
-            </Link>
-          </div>
-          
-          <div className="admin-panel-content">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Ürün Adı</th>
-                  <th>Fiyat</th>
-                  <th>Satış Adedi</th>
-                  <th>İşlem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.popularProducts.map((product) => (
-                  <tr key={product.id}>
-                    <td>{product.name}</td>
-                    <td>{product.price.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</td>
-                    <td>{product.sales}</td>
-                    <td>
-                      <div className="admin-table-actions">
-                        <Link href={`/admin/urunler/${product.id}`} className="admin-action-button">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="18" height="18">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </Link>
-                        <Link href={`/admin/urunler/${product.id}/duzenle`} className="admin-action-button">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="18" height="18">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      
       {/* Hızlı İşlemler */}
       <div className="admin-dashboard-actions">
         <Link href="/admin/urunler/ekle" className="admin-action-card">
@@ -238,16 +186,6 @@ export default function AdminDashboard() {
             </svg>
           </div>
           <div className="admin-action-text">Yeni Kampanya Oluştur</div>
-        </Link>
-        
-        <Link href="/admin/ayarlar" className="admin-action-card">
-          <div className="admin-action-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <div className="admin-action-text">Site Ayarları</div>
         </Link>
       </div>
     </div>

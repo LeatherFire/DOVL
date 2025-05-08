@@ -2,6 +2,184 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+// Renk ve beden seçim alanları için yeni komponentler
+const ColorSelector = ({ colors, selectedColors, onToggle }) => (
+  <div className="admin-color-selector">
+    {colors.map(color => (
+      <button 
+        key={color.id} 
+        type="button"
+        className={`admin-color-button ${selectedColors.includes(color.id) ? 'selected' : ''}`}
+        onClick={() => onToggle(color.id)}
+      >
+        <div 
+          className="admin-color-swatch" 
+          style={{ 
+            backgroundColor: color.hex,
+            border: color.id === 'beyaz' ? '1px solid #ddd' : 'none'
+          }}
+        ></div>
+        <div className="admin-color-name">{color.name}</div>
+      </button>
+    ))}
+  </div>
+);
+
+const SizeSelector = ({ sizes, selectedSizes, onToggle }) => (
+  <div className="admin-size-selector">
+    {sizes.map(size => (
+      <button 
+        key={size.id} 
+        type="button"
+        className={`admin-size-button ${selectedSizes.includes(size.id) ? 'selected' : ''}`}
+        onClick={() => onToggle(size.id)}
+      >
+        {size.name}
+      </button>
+    ))}
+  </div>
+);
+
+// Varyantlar için renk ve beden kombinasyonları
+const ProductVariants = ({ colors, sizes, selectedColors, selectedSizes, variants, onChange }) => {
+  // Seçili renk ve bedenlere göre varyantları oluştur
+  const updateVariants = () => {
+    if (selectedColors.length === 0 || selectedSizes.length === 0) {
+      // Henüz renk ve beden seçilmemişse uyarı göster
+      alert('Lütfen en az bir renk ve bir beden seçin.');
+      return;
+    }
+    
+    const newVariants = [];
+    
+    // Seçili her renk için
+    selectedColors.forEach(colorId => {
+      const color = colors.find(c => c.id === colorId);
+      
+      // Seçili her beden için
+      selectedSizes.forEach(sizeId => {
+        const size = sizes.find(s => s.id === sizeId);
+        
+        // Mevcut varyantı bul
+        const existingVariant = variants.find(
+          v => v.colorId === colorId && v.sizeId === sizeId
+        );
+        
+        // Mevcut varyant varsa onu kullan, yoksa yeni oluştur
+        const variant = existingVariant || {
+          id: `${colorId}-${sizeId}`,
+          colorId: colorId,
+          colorName: color.name,
+          colorHex: color.hex,
+          sizeId: sizeId,
+          sizeName: size.name,
+          stock: 0,
+          sku: `DOVL-${colorId.substring(0,3).toUpperCase()}-${sizeId.toUpperCase()}`
+        };
+        
+        newVariants.push(variant);
+      });
+    });
+    
+    onChange(newVariants);
+  };
+  
+  
+  // Varyant stok güncelleme
+  const handleStockChange = (variantId, value) => {
+    const updatedVariants = variants.map(variant => {
+      if (variant.id === variantId) {
+        return { ...variant, stock: parseInt(value) || 0 };
+      }
+      return variant;
+    });
+    
+    onChange(updatedVariants);
+  };
+
+  // SKU güncelleme
+  const handleSkuChange = (variantId, value) => {
+    const updatedVariants = variants.map(variant => {
+      if (variant.id === variantId) {
+        return { ...variant, sku: value };
+      }
+      return variant;
+    });
+    
+    onChange(updatedVariants);
+  };
+  
+  return (
+    <div className="admin-product-variants">
+      <div className="admin-panel-subheader">
+        <h3>Ürün Varyantları</h3>
+        <button 
+          type="button" 
+          className="admin-button admin-button-small admin-button-primary"
+          onClick={updateVariants}
+        >
+          Varyantları Güncelle
+        </button>
+      </div>
+      
+      {variants.length > 0 ? (
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Renk</th>
+              <th>Beden</th>
+              <th>Stok Miktarı</th>
+              <th>Ürün Kodu (SKU)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {variants.map(variant => (
+              <tr key={variant.id}>
+                <td>
+                  <div className="admin-variant-color">
+                    <div 
+                      className="admin-color-swatch-small" 
+                      style={{ 
+                        backgroundColor: variant.colorHex,
+                        border: variant.colorId === 'beyaz' ? '1px solid #ddd' : 'none'
+                      }}
+                    ></div>
+                    <span>{variant.colorName}</span>
+                  </div>
+                </td>
+                <td>{variant.sizeName}</td>
+                <td>
+                  <input
+                    type="number"
+                    value={variant.stock}
+                    onChange={(e) => handleStockChange(variant.id, e.target.value)}
+                    className="admin-form-input admin-form-input-small"
+                    min="0"
+                    step="1"
+                  />
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    value={variant.sku}
+                    onChange={(e) => handleSkuChange(variant.id, e.target.value)}
+                    className="admin-form-input"
+                    placeholder="Ürün kodu"
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="admin-no-variants">
+          <p>Henüz ürün varyantı oluşturulmadı. En az bir renk ve bir beden seçip, Varyantları Güncelle butonuna tıklayın.</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function AdminAddProduct() {
   const [categories, setCategories] = useState([]);
   const [formData, setFormData] = useState({
@@ -15,6 +193,7 @@ export default function AdminAddProduct() {
     colors: [],
     sizes: [],
     images: [],
+    variants: [], // Yeni eklenen varyantlar
     isNew: false,
     isActive: true
   });
@@ -49,7 +228,11 @@ export default function AdminAddProduct() {
     { id: 'yesil', name: 'Yeşil', hex: '#008000' },
     { id: 'sari', name: 'Sarı', hex: '#FFFF00' },
     { id: 'mor', name: 'Mor', hex: '#800080' },
-    { id: 'kahverengi', name: 'Kahverengi', hex: '#8B4513' }
+    { id: 'kahverengi', name: 'Kahverengi', hex: '#8B4513' },
+    { id: 'gri', name: 'Gri', hex: '#808080' },
+    { id: 'pembe', name: 'Pembe', hex: '#FF69B4' },
+    { id: 'turuncu', name: 'Turuncu', hex: '#FFA500' },
+    { id: 'bej', name: 'Bej', hex: '#F5F5DC' }
   ];
   
   const sizeOptions = [
@@ -57,7 +240,8 @@ export default function AdminAddProduct() {
     { id: 's', name: 'S' },
     { id: 'm', name: 'M' },
     { id: 'l', name: 'L' },
-    { id: 'xl', name: 'XL' }
+    { id: 'xl', name: 'XL' },
+    { id: 'xxl', name: 'XXL' }
   ];
   
   // Formu güncelleme
@@ -129,6 +313,14 @@ export default function AdminAddProduct() {
       }
     });
   };
+
+  // Varyantları güncelleme
+  const updateVariants = (newVariants) => {
+    setFormData(prev => ({
+      ...prev,
+      variants: newVariants
+    }));
+  };
   
   // Mock görsel yükleme fonksiyonu
   const handleImageUpload = (e) => {
@@ -178,12 +370,24 @@ export default function AdminAddProduct() {
     }
     
     if (!formData.category) newErrors.category = 'Kategori seçimi gereklidir';
-    if (!formData.stock) newErrors.stock = 'Stok bilgisi gereklidir';
-    else if (isNaN(formData.stock) || Number(formData.stock) < 0) newErrors.stock = 'Geçerli bir stok miktarı giriniz';
     
     if (formData.colors.length === 0) newErrors.colors = 'En az bir renk seçiniz';
     if (formData.sizes.length === 0) newErrors.sizes = 'En az bir beden seçiniz';
     if (formData.images.length === 0) newErrors.images = 'En az bir görsel yükleyiniz';
+    
+    // Varyant kontrolü
+    if (formData.variants.length === 0) {
+      newErrors.variants = 'En az bir ürün varyantı oluşturmalısınız';
+    } else {
+      // Tüm varyantların geçerli stok değerine sahip olduğunu kontrol et
+      const hasInvalidStock = formData.variants.some(variant => 
+        isNaN(variant.stock) || variant.stock < 0
+      );
+      
+      if (hasInvalidStock) {
+        newErrors.variants = 'Tüm varyantlar için geçerli stok miktarı giriniz';
+      }
+    }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -219,6 +423,7 @@ export default function AdminAddProduct() {
         colors: [],
         sizes: [],
         images: [],
+        variants: [],
         isNew: false,
         isActive: true
       });
@@ -344,37 +549,21 @@ export default function AdminAddProduct() {
                   </div>
                 </div>
                 
-                <div className="admin-form-row">
-                  <div className="admin-form-group">
-                    <label htmlFor="category" className="admin-form-label">Kategori <span className="required">*</span></label>
-                    <select
-                      id="category"
-                      name="category"
-                      value={formData.category}
-                      onChange={handleChange}
-                      className={`admin-form-select ${errors.category ? 'admin-input-error' : ''}`}
-                    >
-                      <option value="">Kategori Seçin</option>
-                      {categories.map(category => (
-                        <option key={category.id} value={category.id}>{category.name}</option>
-                      ))}
-                    </select>
-                    {errors.category && <div className="admin-form-error">{errors.category}</div>}
-                  </div>
-                  
-                  <div className="admin-form-group">
-                    <label htmlFor="stock" className="admin-form-label">Stok <span className="required">*</span></label>
-                    <input
-                      type="number"
-                      id="stock"
-                      name="stock"
-                      value={formData.stock}
-                      onChange={handleChange}
-                      min="0"
-                      className={`admin-form-input ${errors.stock ? 'admin-input-error' : ''}`}
-                    />
-                    {errors.stock && <div className="admin-form-error">{errors.stock}</div>}
-                  </div>
+                <div className="admin-form-group">
+                  <label htmlFor="category" className="admin-form-label">Kategori <span className="required">*</span></label>
+                  <select
+                    id="category"
+                    name="category"
+                    value={formData.category}
+                    onChange={handleChange}
+                    className={`admin-form-select ${errors.category ? 'admin-input-error' : ''}`}
+                  >
+                    <option value="">Kategori Seçin</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.id}>{category.name}</option>
+                    ))}
+                  </select>
+                  {errors.category && <div className="admin-form-error">{errors.category}</div>}
                 </div>
                 
                 <div className="admin-form-row">
@@ -402,6 +591,41 @@ export default function AdminAddProduct() {
                     </label>
                   </div>
                 </div>
+              </div>
+            </div>
+            
+            <div className="admin-panel">
+              <div className="admin-panel-title">Ürün Varyantları</div>
+              <div className="admin-panel-content">
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Renkler <span className="required">*</span></label>
+                  <ColorSelector 
+                    colors={colorOptions}
+                    selectedColors={formData.colors}
+                    onToggle={toggleColor}
+                  />
+                  {errors.colors && <div className="admin-form-error">{errors.colors}</div>}
+                </div>
+                
+                <div className="admin-form-group">
+                  <label className="admin-form-label">Bedenler <span className="required">*</span></label>
+                  <SizeSelector 
+                    sizes={sizeOptions}
+                    selectedSizes={formData.sizes}
+                    onToggle={toggleSize}
+                  />
+                  {errors.sizes && <div className="admin-form-error">{errors.sizes}</div>}
+                </div>
+                
+                <ProductVariants 
+                  colors={colorOptions}
+                  sizes={sizeOptions}
+                  selectedColors={formData.colors}
+                  selectedSizes={formData.sizes}
+                  variants={formData.variants}
+                  onChange={updateVariants}
+                />
+                {errors.variants && <div className="admin-form-error">{errors.variants}</div>}
               </div>
             </div>
             
@@ -446,51 +670,6 @@ export default function AdminAddProduct() {
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
-          
-          <div className="admin-form-right">
-            <div className="admin-panel">
-              <div className="admin-panel-title">Renkler</div>
-              <div className="admin-panel-content">
-                <div className="admin-color-options">
-                  {colorOptions.map(color => (
-                    <div 
-                      key={color.id} 
-                      className={`admin-color-option ${formData.colors.includes(color.id) ? 'selected' : ''}`}
-                      onClick={() => toggleColor(color.id)}
-                    >
-                      <div 
-                        className="admin-color-swatch" 
-                        style={{ 
-                          backgroundColor: color.hex,
-                          border: color.id === 'beyaz' ? '1px solid #ddd' : 'none'
-                        }}
-                      ></div>
-                      <div className="admin-color-name">{color.name}</div>
-                    </div>
-                  ))}
-                </div>
-                {errors.colors && <div className="admin-form-error">{errors.colors}</div>}
-              </div>
-            </div>
-            
-            <div className="admin-panel">
-              <div className="admin-panel-title">Bedenler</div>
-              <div className="admin-panel-content">
-                <div className="admin-size-options">
-                  {sizeOptions.map(size => (
-                    <div 
-                      key={size.id} 
-                      className={`admin-size-option ${formData.sizes.includes(size.id) ? 'selected' : ''}`}
-                      onClick={() => toggleSize(size.id)}
-                    >
-                      {size.name}
-                    </div>
-                  ))}
-                </div>
-                {errors.sizes && <div className="admin-form-error">{errors.sizes}</div>}
               </div>
             </div>
           </div>
