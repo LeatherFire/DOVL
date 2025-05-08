@@ -3,10 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import Annotated
-from datetime import datetime, timezone
 from pymongo.errors import DuplicateKeyError
 import pymongo
 from bson import ObjectId # ObjectId'i kontrol etmek için import edebiliriz
+
+import secrets
+import string
+from datetime import datetime, timedelta, timezone
 
 from database import get_db_dependency
 from models.user_models import UserCreate, UserPublic, UserLogin
@@ -16,6 +19,81 @@ from utils.security import verify_password, create_access_token, get_password_ha
 router = APIRouter()
 
 DBDep = Annotated[AsyncIOMotorDatabase, Depends(get_db_dependency)]
+
+@router.post("/forgot-password")
+async def forgot_password(email: str = Form(...), db: DBDep = Depends(get_db_dependency)):
+    """Kullanıcıya şifre sıfırlama bağlantısı gönderir."""
+    users_collection = db["users"]
+    user = await users_collection.find_one({"email": email})
+    
+    if not user:
+        # Güvenlik için kullanıcı bulunamasa bile başarılı mesajı döndür
+        return {"message": "Şifre sıfırlama bağlantısı e-posta adresinize gönderildi (eğer hesap varsa)."}
+    
+    # Şifre sıfırlama token'ı oluştur
+    reset_token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(64))
+    reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)  # 1 saat geçerli
+    
+    # Token'ı kullanıcı belgesine kaydet
+    await users_collection.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "passwordResetToken": reset_token,
+            "passwordResetExpires": reset_expires,
+            "updatedAt": datetime.now(timezone.utc)
+        }}
+    )
+    
+    # E-posta gönderme işlemi burada olacak
+    # Bu örnekte sadece token döndürüyoruz
+    # Gerçek uygulamada bir e-posta servisi (SMTP) kullanılmalı
+    
+    # Frontend'e başarılı mesajı döndür
+    return {"message": "Şifre sıfırlama bağlantısı e-posta adresinize gönderildi."}
+
+@router.post("/reset-password")
+async def reset_password(
+    token: str = Form(...),
+    password: str = Form(...),
+    db: DBDep = Depends(get_db_dependency)
+):
+    """Şifre sıfırlama token'ı ile yeni şifre belirler."""
+    if len(password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Şifre en az 6 karakter olmalıdır."
+        )
+        
+    users_collection = db["users"]
+    
+    # Token'a sahip kullanıcıyı bul
+    user = await users_collection.find_one({
+        "passwordResetToken": token,
+        "passwordResetExpires": {"$gt": datetime.now(timezone.utc)}  # Token süresi dolmamış olmalı
+    })
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Geçersiz veya süresi dolmuş şifre sıfırlama bağlantısı."
+        )
+    
+    # Yeni şifreyi hashle ve kullanıcıyı güncelle
+    hashed_password = get_password_hash(password)
+    
+    await users_collection.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "hashed_password": hashed_password,
+            "updatedAt": datetime.now(timezone.utc)
+        },
+        "$unset": {
+            "passwordResetToken": "",
+            "passwordResetExpires": ""
+        }}
+    )
+    
+    return {"message": "Şifreniz başarıyla sıfırlandı. Şimdi giriş yapabilirsiniz."}
 
 @router.post("/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, db: DBDep):

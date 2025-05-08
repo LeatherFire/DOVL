@@ -264,3 +264,77 @@ export async function getOrderById(orderId) {
 export async function getSimilarProducts(productId, limit = 4) {
   return fetchAPI(`/products/similar/${productId}?limit=${limit}`);
 }
+
+// src/utils/api.js dosyasına eklenecek yeni fonksiyonlar
+
+/**
+ * Şifre sıfırlama linki talep eden fonksiyon
+ * @param {string} email - Kullanıcı email adresi
+ * @returns {Promise} Başarı durumu
+ */
+export async function forgotPassword(email) {
+  const formData = new URLSearchParams();
+  formData.append("email", email);
+
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/auth/forgot-password`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formData,
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Şifre sıfırlama isteği gönderilemedi");
+  }
+
+  return data;
+}
+
+/**
+ * Şifre sıfırlama işlemini gerçekleştiren fonksiyon
+ * @param {string} token - Şifre sıfırlama token'ı
+ * @param {string} password - Yeni şifre
+ * @returns {Promise} Başarı durumu
+ */
+export async function resetPassword(token, password) {
+  const formData = new URLSearchParams();
+  formData.append("token", token);
+  formData.append("password", password);
+
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/auth/reset-password`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formData,
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Şifre sıfırlanamadı");
+  }
+
+  return data;
+}
+
+/**
+ * Kullanıcı şifresini değiştiren fonksiyon (giriş yapmış kullanıcı için)
+ * @param {Object} passwords - Eski ve yeni şifre bilgileri
+ * @returns {Promise} Başarı durumu
+ */
+export async function changePassword(passwords) {
+  return fetchAPI("/users/me/password", {
+    method: "PUT",
+    body: JSON.stringify(passwords),
+  });
+}
