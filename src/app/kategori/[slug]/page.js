@@ -2,12 +2,14 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { getProducts, getCategories } from '../../../utils/api';
 
 export default function CategoryPage() {
   const params = useParams();
   const { slug } = params;
   
   const [products, setProducts] = useState([]);
+  const [categoryInfo, setCategoryInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSort, setSelectedSort] = useState("new");
   const [selectedFilters, setSelectedFilters] = useState({
@@ -16,6 +18,12 @@ export default function CategoryPage() {
     price: []
   });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: 12,
+    totalPages: 0
+  });
   
   // Kategori başlığını formatlama
   const formatCategoryTitle = (slug) => {
@@ -34,99 +42,51 @@ export default function CategoryPage() {
     return categoryMap[slug] || slug.toUpperCase();
   };
   
-  // Mock veriler - Daha sonra API'dan çekilecek
   useEffect(() => {
-    // API çağrısını simüle etmek için setTimeout kullanıyoruz
-    const timer = setTimeout(() => {
-      // Her kategori için farklı ürünler oluşturalım
-      const mockProducts = generateMockProducts(slug, 12);
-      setProducts(mockProducts);
-      setIsLoading(false);
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [slug]);
-  
-  // Mock ürün verisi oluşturma fonksiyonu
-  const generateMockProducts = (category, count) => {
-    const colors = ['Siyah', 'Beyaz', 'Kırmızı', 'Mavi', 'Sarı', 'Yeşil', 'Mor', 'Kahverengi'];
-    const sizes = ['XS', 'S', 'M', 'L', 'XL', '36', '38', '40', '42'];
-    
-    // Kategori bazlı ürün çeşitlerini tanımlayalım
-    const productTypes = {
-      'elbise': ['Mini', 'Midi', 'Maxi', 'Uzun Kollu', 'Askılı', 'Dekolteli', 'Drapeli'],
-      'bluz': ['Crop', 'V Yaka', 'Düşük Omuz', 'Dantelli', 'Basic', 'Bağcıklı', 'Düğmeli'],
-      'etek': ['Mini', 'Midi', 'Maxi', 'Pileli', 'Kalem', 'A Kesim', 'Büzgülü'],
-      'pantolon': ['Skinny', 'Wide Leg', 'Straight', 'Flare', 'High Waist', 'Paper Bag', 'Palazzo'],
-      'aksesuar': ['Kolye', 'Bileklik', 'Küpe', 'Şal', 'Kemer', 'Şapka', 'Çanta'],
-      'ceket': ['Blazer', 'Denim', 'Bomber', 'Trençkot', 'Kaşe', 'Deri', 'Oversize'],
-      'yaz-koleksiyonu': ['Elbise', 'Bluz', 'Etek', 'Şort', 'Bikini', 'Mayo', 'Plaj Elbisesi']
+    const loadCategoryProducts = async () => {
+      setIsLoading(true);
+      try {
+        // Kategori bilgilerini ve ürünlerini getir
+        const categoriesResponse = await getCategories();
+        const foundCategory = categoriesResponse.data.find(cat => cat.slug === slug);
+        if (foundCategory) {
+          setCategoryInfo(foundCategory);
+        }
+        
+        // Seçilen sıralama ve filtrelere göre ürünleri getir
+        const minPrice = selectedFilters.price.find(p => p.includes('0-300')) ? 0 : null;
+        const maxPrice = selectedFilters.price.find(p => p.includes('1000+')) ? null : 
+                        selectedFilters.price.find(p => p.includes('500-1000')) ? 1000 :
+                        selectedFilters.price.find(p => p.includes('300-500')) ? 500 : 
+                        selectedFilters.price.find(p => p.includes('0-300')) ? 300 : null;
+        
+        const productsResponse = await getProducts(
+          { 
+            category: slug,
+            minPrice,
+            maxPrice,
+          }, 
+          { page: pagination.page, limit: pagination.limit }, 
+          selectedSort
+        );
+        
+        setProducts(productsResponse.data);
+        setPagination(productsResponse.pagination);
+      } catch (error) {
+        console.error("Ürünler yüklenirken hata:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
     
-    const types = productTypes[category] || ['Standart', 'Özel', 'Premium', 'Günlük', 'Şık', 'Spor', 'Klasik'];
-    
-    // Ürün kartlarını oluşturalım
-    return Array.from({ length: count }, (_, i) => {
-      const type = types[Math.floor(Math.random() * types.length)];
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      const isNew = Math.random() > 0.7; // %30 ihtimalle yeni ürün
-      const hasDiscount = Math.random() > 0.5; // %50 ihtimalle indirimli
-      const basePrice = Math.floor(Math.random() * 1000) + 300; // 300-1300 TL arası
-      const discountRate = hasDiscount ? (Math.floor(Math.random() * 4) + 2) * 10 : 0; // %20, %30, %40, %50 indirimler
-      const salePrice = hasDiscount ? basePrice * (1 - discountRate / 100) : null;
-      
-      return {
-        id: `${category}-${i + 1}`,
-        name: `${color} ${type} ${formatCategoryTitle(category)}`,
-        price: basePrice,
-        salePrice: salePrice,
-        image: `https://placehold.co/1200x1600/${color === 'Beyaz' ? 'FFFFFF' : color === 'Siyah' ? '000000' : Math.floor(Math.random()*16777215).toString(16)}/1A1A1A/png?text=DOVL`,
-        category: category,
-        isNew: isNew,
-        color: color,
-        sizes: sizes.slice(0, Math.floor(Math.random() * sizes.length) + 3), // Rastgele beden sayısı
-        stockLevel: Math.floor(Math.random() * 30) + 1 // 1-30 arası stok
-      };
-    });
-  };
+    loadCategoryProducts();
+  }, [slug, pagination.page, selectedSort, selectedFilters]);
   
   // Filtreleri Uygulama
   const applyFilters = () => {
-    // Gerçek projede API sorgusu gönderilecek
-    console.log("Uygulanan filtreler:", selectedFilters);
+    // Sayfayı ilk sayfaya döndür ve filtreleri uygula
+    setPagination(prev => ({...prev, page: 1}));
   };
-  
-  // Filtreleme ve sıralama işlemleri için
-  const sortProducts = (products, sortType) => {
-    const sortedProducts = [...products];
-    
-    switch(sortType) {
-      case "price-low":
-        return sortedProducts.sort((a, b) => (a.salePrice || a.price) - (b.salePrice || b.price));
-      case "price-high":
-        return sortedProducts.sort((a, b) => (b.salePrice || b.price) - (a.salePrice || a.price));
-      case "discount":
-        return sortedProducts.sort((a, b) => {
-          if (a.salePrice && b.salePrice) {
-            const discountA = 1 - (a.salePrice / a.price);
-            const discountB = 1 - (b.salePrice / b.price);
-            return discountB - discountA;
-          } else if (a.salePrice) {
-            return -1;
-          } else if (b.salePrice) {
-            return 1;
-          }
-          return 0;
-        });
-      case "name":
-        return sortedProducts.sort((a, b) => a.name.localeCompare(b.name));
-      case "new":
-      default:
-        return sortedProducts.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
-    }
-  };
-  
-  const displayedProducts = sortProducts(products, selectedSort);
   
   // Filtre panelini açıp kapatma
   const toggleFilter = () => {
@@ -166,7 +126,7 @@ export default function CategoryPage() {
         <div className="category-banner-image" style={{ backgroundImage: "url('https://placehold.co/1920x400/1A1A1A/FFFFFF/png?text=DOVL')" }}></div>
         <div className="category-banner-overlay"></div>
         <div className="category-banner-content">
-          <h1 className="category-banner-title">{formatCategoryTitle(slug)}</h1>
+          <h1 className="category-banner-title">{categoryInfo?.name || formatCategoryTitle(slug)}</h1>
         </div>
       </section>
       
@@ -190,8 +150,8 @@ export default function CategoryPage() {
                   onChange={(e) => setSelectedSort(e.target.value)}
                 >
                   <option value="new">Yeni Gelenler</option>
-                  <option value="price-low">Fiyat (Düşükten Yükseğe)</option>
-                  <option value="price-high">Fiyat (Yüksekten Düşüğe)</option>
+                  <option value="price_asc">Fiyat (Düşükten Yükseğe)</option>
+                  <option value="price_high">Fiyat (Yüksekten Düşüğe)</option>
                   <option value="discount">İndirim Oranı</option>
                   <option value="name">İsim (A-Z)</option>
                 </select>
@@ -299,7 +259,7 @@ export default function CategoryPage() {
                 {/* Sıralama ve Ürün Sayısı */}
                 <div className="products-header">
                   <div className="products-count">
-                    {products.length} ürün
+                    {pagination.total} ürün
                   </div>
                   
                   <div className="products-sort desktop-only">
@@ -311,8 +271,8 @@ export default function CategoryPage() {
                       onChange={(e) => setSelectedSort(e.target.value)}
                     >
                       <option value="new">Yeni Gelenler</option>
-                      <option value="price-low">Fiyat (Düşükten Yükseğe)</option>
-                      <option value="price-high">Fiyat (Yüksekten Düşüğe)</option>
+                      <option value="price_asc">Fiyat (Düşükten Yükseğe)</option>
+                      <option value="price_high">Fiyat (Yüksekten Düşüğe)</option>
                       <option value="discount">İndirim Oranı</option>
                       <option value="name">İsim (A-Z)</option>
                     </select>
@@ -325,21 +285,21 @@ export default function CategoryPage() {
                     <div className="loading-spinner"></div>
                     <p>Ürünler yükleniyor...</p>
                   </div>
-                ) : displayedProducts.length === 0 ? (
+                ) : products.length === 0 ? (
                   <div className="products-empty">
                     <p>Bu kategoride ürün bulunamadı.</p>
                   </div>
                 ) : (
                   <div className="products-grid">
-                    {displayedProducts.map((product) => (
+                    {products.map((product) => (
                       <Link 
                         key={product.id} 
-                        href={`/urunler/${product.id}`}
+                        href={`/urunler/${product.slug || product.id}`}
                         className="product"
                       >
                         <div className="product-image-container">
                           <img 
-                            src={product.image}
+                            src={product.images && product.images.length > 0 ? product.images[0].url : "https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL"}
                             alt={product.name}
                             className="product-image"
                           />
@@ -377,6 +337,33 @@ export default function CategoryPage() {
                         </div>
                       </Link>
                     ))}
+                  </div>
+                )}
+
+                {/* Sayfalama */}
+                {!isLoading && products.length > 0 && pagination.totalPages > 1 && (
+                  <div className="pagination-container" style={{ display: 'flex', justifyContent: 'center', margin: '2rem 0' }}>
+                    <button 
+                      onClick={() => setPagination(prev => ({...prev, page: Math.max(1, prev.page - 1)}))}
+                      disabled={pagination.page <= 1}
+                      className="btn btn-outline"
+                      style={{ margin: '0 0.5rem' }}
+                    >
+                      &lt; Önceki
+                    </button>
+                    
+                    <span style={{ margin: '0 1rem', display: 'flex', alignItems: 'center' }}>
+                      Sayfa {pagination.page} / {pagination.totalPages}
+                    </span>
+                    
+                    <button 
+                      onClick={() => setPagination(prev => ({...prev, page: Math.min(prev.totalPages, prev.page + 1)}))}
+                      disabled={pagination.page >= pagination.totalPages}
+                      className="btn btn-outline"
+                      style={{ margin: '0 0.5rem' }}
+                    >
+                      Sonraki &gt;
+                    </button>
                   </div>
                 )}
               </div>

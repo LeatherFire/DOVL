@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { getProductById, addToCart } from '../../../utils/api';
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -14,133 +15,30 @@ export default function ProductDetailPage() {
   const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [activeTab, setActiveTab] = useState('description');
+  const [cartLoading, setCartLoading] = useState(false);
+  const [cartMessage, setCartMessage] = useState({type: '', message: ''});
   
-  // Ürün verisi yükleme simülasyonu
+  // Ürün verisi yükleme
   useEffect(() => {
-    const timer = setTimeout(() => {
-      // Gerçek projede API çağrısı yapılacak: fetch(`/api/products/${id}`)
-      
-      // Şimdilik mock veri kullanıyoruz
-      const mockProduct = generateMockProduct(id);
-      setProduct(mockProduct);
-      setLoading(false);
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [id]);
-  
-  // Mock ürün verisi oluşturma
-  const generateMockProduct = (id) => {
-    // Kategorilerin eşleştirilmesi
-    const categories = {
-      'elbise': { name: 'Elbise', slug: 'elbise' },
-      'bluz': { name: 'Bluz', slug: 'bluz' },
-      'etek': { name: 'Etek', slug: 'etek' },
-      'pantolon': { name: 'Pantolon', slug: 'pantolon' },
-      'aksesuar': { name: 'Aksesuar', slug: 'aksesuar' },
-      'ceket': { name: 'Ceket', slug: 'ceket' }
-    };
-    
-    // ID'den kategori bilgisini çıkaralım
-    const categorySlug = id.split('-')[0];
-    const category = categories[categorySlug] || { name: 'Diğer', slug: 'diger' };
-    
-    // Diğer ürün bilgilerini rastgele oluşturalım
-    const colors = ['Siyah', 'Beyaz', 'Kırmızı', 'Mavi', 'Sarı', 'Yeşil', 'Mor', 'Kahverengi'];
-    const sizes = ['XS', 'S', 'M', 'L', 'XL'];
-    const productTypes = ['Standart', 'Premium', 'Özel', 'Klasik', 'Modern'];
-    
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    const type = productTypes[Math.floor(Math.random() * productTypes.length)];
-    const isNew = Math.random() > 0.7;
-    const hasDiscount = Math.random() > 0.5;
-    const basePrice = Math.floor(Math.random() * 1000) + 300; // 300-1300 TL arası
-    const discountRate = hasDiscount ? (Math.floor(Math.random() * 4) + 2) * 10 : 0; // %20, %30, %40, %50 indirimler
-    const salePrice = hasDiscount ? Math.round(basePrice * (1 - discountRate / 100)) : null;
-    
-    // Ürün açıklaması
-    const description = `Bu ${color.toLowerCase()} ${type.toLowerCase()} ${category.name.toLowerCase()}, modern tasarımı ve yüksek kaliteli kumaşıyla günlük veya özel kombinlerinize şıklık katacak. Rahat kesimi ve zarif duruşuyla her zaman için mükemmel bir seçim.`;
-    
-    // Ürün özellikleri
-    const details = [
-      "Yüksek kaliteli premium kumaş",
-      "Çevre dostu üretim",
-      "Nefes alabilen yapı",
-      "Uzun ömürlü dayanıklılık",
-      "Kolay bakım"
-    ];
-    
-    // Renk kodu
-    const colorHex = {
-      'Siyah': '#000000',
-      'Beyaz': '#FFFFFF',
-      'Kırmızı': '#FF0000',
-      'Mavi': '#0000FF',
-      'Sarı': '#FFFF00',
-      'Yeşil': '#008000',
-      'Mor': '#800080',
-      'Kahverengi': '#8B4513'
-    }[color] || '#000000';
-    
-    // Çoklu ürün görselleri oluşturma
-    const generateImages = (count) => {
-      return Array.from({ length: count }, (_, i) => ({
-        id: i,
-        src: `https://placehold.co/1200x1600/${colorHex.replace('#', '')}/${color === 'Beyaz' ? '000000' : 'FFFFFF'}/png?text=DOVL_${i + 1}`,
-        alt: `${color} ${category.name} - Görsel ${i + 1}`
-      }));
-    };
-    
-    // Benzer ürünler
-    const generateSimilarProducts = (count) => {
-      return Array.from({ length: count }, (_, i) => {
-        const similarColor = colors[Math.floor(Math.random() * colors.length)];
-        const similarPrice = Math.floor(Math.random() * 800) + 300;
-        const similarDiscount = Math.random() > 0.5;
-        const similarSalePrice = similarDiscount ? Math.round(similarPrice * 0.7) : null;
+    const fetchProduct = async () => {
+      setLoading(true);
+      try {
+        const data = await getProductById(id);
+        setProduct(data);
         
-        return {
-          id: `${category.slug}-similar-${i + 1}`,
-          name: `${similarColor} ${productTypes[Math.floor(Math.random() * productTypes.length)]} ${category.name}`,
-          price: similarPrice,
-          salePrice: similarSalePrice,
-          image: `https://placehold.co/800x1100/${similarColor === 'Beyaz' ? 'FFFFFF' : similarColor === 'Siyah' ? '000000' : Math.floor(Math.random()*16777215).toString(16)}/${similarColor === 'Beyaz' ? '000000' : 'FFFFFF'}/png?text=DOVL`,
-          isNew: Math.random() > 0.7
-        };
-      });
+        // Eğer varyantlar varsa ilk varyantın bedenini seç
+        if (data.variants && data.variants.length > 0) {
+          setSelectedSize(data.variants[0].size);
+        }
+      } catch (error) {
+        console.error("Ürün yüklenirken hata:", error);
+      } finally {
+        setLoading(false);
+      }
     };
     
-    return {
-      id,
-      name: `${color} ${type} ${category.name}`,
-      slug: `${color.toLowerCase()}-${type.toLowerCase()}-${category.slug}`,
-      price: basePrice,
-      salePrice: salePrice,
-      images: generateImages(5),
-      category: category,
-      isNew: isNew,
-      color: color,
-      colorHex: colorHex,
-      availableColors: colors.slice(0, 4), // 4 renk seçeneği
-      sizes: sizes,
-      selectedSize: '',
-      stockLevel: Math.floor(Math.random() * 30) + 1, // 1-30 arası stok
-      description: description,
-      details: details,
-      materialCare: [
-        "Malzeme: %100 Pamuk",
-        "Soğuk suda yıkayınız",
-        "Düşük ısıda ütüleyiniz",
-        "Kuru temizleme yapılmaz",
-        "Çamaşır suyu kullanmayınız"
-      ],
-      modelInfo: {
-        height: 175 + Math.floor(Math.random() * 10), // 175-184 cm
-        size: sizes[Math.floor(Math.random() * sizes.length)]
-      },
-      similarProducts: generateSimilarProducts(4)
-    };
-  };
+    fetchProduct();
+  }, [id]);
   
   // Boyut kılavuzunu göster/gizle
   const toggleSizeGuide = () => {
@@ -149,7 +47,10 @@ export default function ProductDetailPage() {
   
   // Miktar artırma
   const increaseQuantity = () => {
-    if (product && selectedQuantity < product.stockLevel) {
+    const selectedVariant = product?.variants?.find(v => v.size === selectedSize);
+    const maxStock = selectedVariant?.stock || 0;
+    
+    if (selectedQuantity < maxStock) {
       setSelectedQuantity(prev => prev + 1);
     }
   };
@@ -162,28 +63,50 @@ export default function ProductDetailPage() {
   };
   
   // Sepete ekleme
-  const addToCart = () => {
+  const handleAddToCart = async () => {
     if (!selectedSize) {
-      alert('Lütfen bir beden seçiniz');
+      setCartMessage({type: 'error', message: 'Lütfen bir beden seçiniz'});
       return;
     }
     
-    console.log('Sepete eklendi:', {
-      product: product.name,
-      size: selectedSize,
-      quantity: selectedQuantity,
-      price: product.salePrice || product.price
-    });
+    const selectedVariant = product.variants.find(v => v.size === selectedSize);
+    if (!selectedVariant) {
+      setCartMessage({type: 'error', message: 'Seçilen beden bulunamadı'});
+      return;
+    }
     
-    // Gerçek projede sepet state'ine ekleme yapılacak
-    alert('Ürün sepetinize eklendi!');
+    if (selectedVariant.stock < selectedQuantity) {
+      setCartMessage({type: 'error', message: `Seçilen miktar için yeterli stok yok. Mevcut stok: ${selectedVariant.stock}`});
+      return;
+    }
+    
+    setCartLoading(true);
+    try {
+      await addToCart({
+        productId: product.id || product._id,
+        variantSku: selectedVariant.sku,
+        quantity: selectedQuantity
+      });
+      
+      setCartMessage({type: 'success', message: 'Ürün sepetinize eklendi!'});
+      // Başarı mesajı belirli bir süre sonra kaybolsun
+      setTimeout(() => {
+        setCartMessage({type: '', message: ''});
+      }, 3000);
+    } catch (error) {
+      console.error("Sepete eklerken hata:", error);
+      setCartMessage({type: 'error', message: error.message || 'Sepete eklerken bir hata oluştu'});
+    } finally {
+      setCartLoading(false);
+    }
   };
   
   // Favorilere ekleme
   const addToWishlist = () => {
-    console.log('Favorilere eklendi:', product.name);
-    // Gerçek projede favoriler state'ine ekleme yapılacak
-    alert('Ürün favorilerinize eklendi!');
+    setCartMessage({type: 'info', message: 'Favorilere ekleme özelliği yakında eklenecek!'});
+    setTimeout(() => {
+      setCartMessage({type: '', message: ''});
+    }, 3000);
   };
   
   if (loading) {
@@ -205,6 +128,10 @@ export default function ProductDetailPage() {
     );
   }
   
+  // Seçili varyanı bul
+  const selectedVariant = product.variants.find(v => v.size === selectedSize);
+  const stockLevel = selectedVariant ? selectedVariant.stock : 0;
+  
   return (
     <main>
       {/* Ürün Detay */}
@@ -216,13 +143,13 @@ export default function ProductDetailPage() {
               <div className="product-thumbnails">
                 {product.images.map((image, index) => (
                   <div 
-                    key={image.id} 
+                    key={index} 
                     className={`product-thumbnail ${selectedImage === index ? 'active' : ''}`}
                     onClick={() => setSelectedImage(index)}
                   >
                     <img 
-                      src={image.src} 
-                      alt={image.alt}
+                      src={image.url} 
+                      alt={image.alt || product.name}
                       className="product-thumbnail-image"
                     />
                   </div>
@@ -230,11 +157,19 @@ export default function ProductDetailPage() {
               </div>
               
               <div className="product-image-main">
-                <img 
-                  src={product.images[selectedImage].src} 
-                  alt={product.images[selectedImage].alt}
-                  className="product-image-large"
-                />
+                {product.images && product.images.length > 0 ? (
+                  <img 
+                    src={product.images[selectedImage]?.url} 
+                    alt={product.images[selectedImage]?.alt || product.name}
+                    className="product-image-large"
+                  />
+                ) : (
+                  <img 
+                    src={`https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL`}
+                    alt={product.name}
+                    className="product-image-large"
+                  />
+                )}
                 
                 {product.isNew && (
                   <span className="product-badge product-badge-new">YENİ</span>
@@ -254,7 +189,15 @@ export default function ProductDetailPage() {
               <div className="product-breadcrumb">
                 <Link href="/" className="breadcrumb-link">Ana Sayfa</Link>
                 <span className="breadcrumb-separator">/</span>
-                <Link href={`/kategori/${product.category.slug}`} className="breadcrumb-link">{product.category.name}</Link>
+                {product.category_details ? (
+                  <Link href={`/kategori/${product.category_details.slug}`} className="breadcrumb-link">
+                    {product.category_details.name}
+                  </Link>
+                ) : (
+                  <Link href={`/kategori/${product.category}`} className="breadcrumb-link">
+                    Kategori
+                  </Link>
+                )}
                 <span className="breadcrumb-separator">/</span>
                 <span className="breadcrumb-current">{product.name}</span>
               </div>
@@ -272,12 +215,15 @@ export default function ProductDetailPage() {
                 )}
               </div>
               
-              {/* Renk Seçenekleri */}
+              {/* Renk Seçenekleri - API'den uygun şekilde gelmediği için şimdilik varsayılan renkle devam */}
               <div className="product-option">
-                <h3 className="option-title">Renk: <span className="selected-option">{product.color}</span></h3>
+                <h3 className="option-title">Renk: <span className="selected-option">
+                  {selectedVariant?.colorName || "Standart"}
+                </span></h3>
                 <div className="color-options">
-                  {product.availableColors.map(color => {
-                    const isSelected = color === product.color;
+                  {Array.from(new Set(product.variants.map(v => v.colorName))).map(color => {
+                    const colorVariant = product.variants.find(v => v.colorName === color);
+                    const isSelected = colorVariant?.colorName === selectedVariant?.colorName;
                     
                     return (
                       <div 
@@ -288,16 +234,7 @@ export default function ProductDetailPage() {
                         <span 
                           className="color-swatch" 
                           style={{ 
-                            backgroundColor: {
-                              'Siyah': '#000000',
-                              'Beyaz': '#FFFFFF',
-                              'Kırmızı': '#FF0000',
-                              'Mavi': '#0000FF',
-                              'Sarı': '#FFFF00',
-                              'Yeşil': '#008000',
-                              'Mor': '#800080',
-                              'Kahverengi': '#8B4513'
-                            }[color] || '#000000',
+                            backgroundColor: colorVariant?.colorHex || '#000000',
                             border: color === 'Beyaz' ? '1px solid #e0e0e0' : 'none'
                           }} 
                         ></span>
@@ -320,17 +257,44 @@ export default function ProductDetailPage() {
                 </div>
                 
                 <div className="size-options">
-                  {product.sizes.map(size => (
-                    <button 
-                      key={size}
-                      className={`size-option ${selectedSize === size ? 'selected' : ''}`}
-                      onClick={() => setSelectedSize(size)}
-                    >
-                      {size}
-                    </button>
-                  ))}
+                  {product.variants.map(variant => {
+                    const isSelected = selectedSize === variant.size;
+                    const isDisabled = variant.stock <= 0;
+                    
+                    return (
+                      <button 
+                        key={variant.sku}
+                        className={`size-option ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                        onClick={() => !isDisabled && setSelectedSize(variant.size)}
+                        disabled={isDisabled}
+                        style={isDisabled ? {opacity: 0.5, cursor: 'not-allowed'} : {}}
+                      >
+                        {variant.size}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+              
+              {/* Mesaj Alanı */}
+              {cartMessage.message && (
+                <div className={`message-container ${cartMessage.type}`} style={{
+                  padding: '10px 15px',
+                  marginBottom: '15px',
+                  borderRadius: '4px',
+                  backgroundColor: cartMessage.type === 'error' ? '#ffebee' : 
+                                 cartMessage.type === 'success' ? '#e8f5e9' : 
+                                 cartMessage.type === 'info' ? '#e3f2fd' : 'transparent',
+                  color: cartMessage.type === 'error' ? '#b71c1c' : 
+                         cartMessage.type === 'success' ? '#1b5e20' : 
+                         cartMessage.type === 'info' ? '#0d47a1' : 'inherit',
+                  border: cartMessage.type === 'error' ? '1px solid #ef9a9a' : 
+                          cartMessage.type === 'success' ? '1px solid #a5d6a7' : 
+                          cartMessage.type === 'info' ? '1px solid #90caf9' : 'none'
+                }}>
+                  {cartMessage.message}
+                </div>
+              )}
               
               {/* Adet Seçimi ve Sepete Ekle */}
               <div className="product-actions">
@@ -350,202 +314,222 @@ export default function ProductDetailPage() {
                     value={selectedQuantity}
                     onChange={(e) => {
                       const value = parseInt(e.target.value);
-                      if (value > 0 && value <= product.stockLevel) {
+                      if (value > 0 && value <= stockLevel) {
                         setSelectedQuantity(value);
                       }
                     }}
                     min="1"
-                    max={product.stockLevel}
+                    max={stockLevel}
                   />
-                  <button 
-                    className="quantity-button" 
-                    onClick={increaseQuantity}
-                    disabled={selectedQuantity >= product.stockLevel}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </button>
-                </div>
-                
-                <button className="add-to-cart-button" onClick={addToCart}>
-                  SEPETE EKLE
-                </button>
-                
-                <button className="wishlist-button" onClick={addToWishlist}>
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                </button>
-              </div>
-              
-              {/* Ürün Detay Sekmeleri */}
-              <div className="product-tabs">
-                <div className="tabs-header">
-                  <button 
-                    className={`tab-button ${activeTab === 'description' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('description')}
-                  >
-                    Ürün Açıklaması
-                  </button>
-                  <button 
-                    className={`tab-button ${activeTab === 'details' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('details')}
-                  >
-                    Ürün Detayları
-                  </button>
-                  <button 
-                    className={`tab-button ${activeTab === 'care' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('care')}
-                  >
-                    Bakım Bilgileri
-                  </button>
-                </div>
-                
-                <div className="tabs-content">
-                  <div className={`tab-panel ${activeTab === 'description' ? 'active' : ''}`}>
-                    <p>{product.description}</p>
-                    <p>Model Bilgisi: {product.modelInfo.height}cm boyunda ve {product.modelInfo.size} beden ürün giymektedir.</p>
-                  </div>
-                  
-                  <div className={`tab-panel ${activeTab === 'details' ? 'active' : ''}`}>
-                    <ul className="details-list">
-                      {product.details.map((detail, index) => (
-                        <li key={index} className="detail-item">{detail}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  
-                  <div className={`tab-panel ${activeTab === 'care' ? 'active' : ''}`}>
-                    <ul className="care-list">
-                      {product.materialCare.map((care, index) => (
-                        <li key={index} className="care-item">{care}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      
-      {/* Beden Kılavuzu Modal */}
-      {showSizeGuide && (
-        <div className="size-guide-modal" onClick={toggleSizeGuide}>
-          <div className="size-guide-content" onClick={(e) => e.stopPropagation()}>
-            <button className="size-guide-close" onClick={toggleSizeGuide}>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            <h2 className="size-guide-title">Beden Kılavuzu</h2>
-            <div className="size-guide-table-container">
-              <table className="size-guide-table">
-                <thead>
-                  <tr>
-                    <th>Beden</th>
-                    <th>Göğüs (cm)</th>
-                    <th>Bel (cm)</th>
-                    <th>Kalça (cm)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>XS</td>
-                    <td>82-85</td>
-                    <td>60-63</td>
-                    <td>87-90</td>
-                  </tr>
-                  <tr>
-                    <td>S</td>
-                    <td>86-89</td>
-                    <td>64-67</td>
-                    <td>91-94</td>
-                  </tr>
-                  <tr>
-                    <td>M</td>
-                    <td>90-93</td>
-                    <td>68-71</td>
-                    <td>95-98</td>
-                  </tr>
-                  <tr>
-                    <td>L</td>
-                    <td>94-97</td>
-                    <td>72-75</td>
-                    <td>99-102</td>
-                  </tr>
-                  <tr>
-                    <td>XL</td>
-                    <td>98-101</td>
-                    <td>76-79</td>
-                    <td>103-106</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div className="size-guide-notes">
-              <p>Not: Beden ölçüleri yaklaşık değerlerdir ve ürünün modelina göre değişiklik gösterebilir.</p>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Benzer Ürünler */}
-      <section className="section similar-products-section">
-        <div className="container">
-          <h2 className="section-title">BENZER ÜRÜNLER</h2>
-          
-          <div className="products-grid">
-            {product.similarProducts.map((similarProduct) => (
-              <Link 
-                key={similarProduct.id} 
-                href={`/urunler/${similarProduct.id}`}
-                className="product"
-              >
-                <div className="product-image-container">
-                  <img 
-                    src={similarProduct.image}
-                    alt={similarProduct.name}
-                    className="product-image"
-                  />
-                  
-                  <div className="product-tags">
-                    {similarProduct.salePrice && (
-                      <span className="product-tag product-tag-discount">
-                        {Math.round((1 - similarProduct.salePrice / similarProduct.price) * 100)}%
-                      </span>
-                    )}
-                    
-                    {similarProduct.isNew && (
-                      <span className="product-tag product-tag-new">
-                        YENİ
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="product-quick-view">
-                    HIZLI İNCELE
-                  </div>
-                </div>
-                
-                <h3 className="product-name">{similarProduct.name}</h3>
-                
-                <div className="product-price">
-                  {similarProduct.salePrice ? (
-                    <>
-                      <span className="product-price-original">{similarProduct.price.toFixed(2)}TL</span>
-                      <span className="product-price-current">{similarProduct.salePrice.toFixed(2)}TL</span>
-                    </>
-                  ) : (
-                    <span className="product-price-current">{similarProduct.price.toFixed(2)}TL</span>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-    </main>
-  );
+<button 
+                   className="quantity-button" 
+                   onClick={increaseQuantity}
+                   disabled={selectedQuantity >= stockLevel}
+                 >
+                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                   </svg>
+                 </button>
+               </div>
+               
+               <button 
+                 className="add-to-cart-button" 
+                 onClick={handleAddToCart}
+                 disabled={cartLoading || stockLevel <= 0}
+               >
+                 {cartLoading ? 'EKLENİYOR...' : stockLevel <= 0 ? 'STOKTA YOK' : 'SEPETE EKLE'}
+               </button>
+               
+               <button className="wishlist-button" onClick={addToWishlist}>
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                 </svg>
+               </button>
+             </div>
+             
+             {/* Stok Durumu */}
+             <div style={{ marginTop: '1rem', fontSize: '0.9rem', color: stockLevel > 0 ? '#4caf50' : '#f44336' }}>
+               {stockLevel > 0 ? `Stok: ${stockLevel} adet` : 'Stokta yok'}
+             </div>
+             
+             {/* Ürün Detay Sekmeleri */}
+             <div className="product-tabs">
+               <div className="tabs-header">
+                 <button 
+                   className={`tab-button ${activeTab === 'description' ? 'active' : ''}`}
+                   onClick={() => setActiveTab('description')}
+                 >
+                   Ürün Açıklaması
+                 </button>
+                 <button 
+                   className={`tab-button ${activeTab === 'details' ? 'active' : ''}`}
+                   onClick={() => setActiveTab('details')}
+                 >
+                   Ürün Detayları
+                 </button>
+                 <button 
+                   className={`tab-button ${activeTab === 'care' ? 'active' : ''}`}
+                   onClick={() => setActiveTab('care')}
+                 >
+                   Bakım Bilgileri
+                 </button>
+               </div>
+               
+               <div className="tabs-content">
+                 <div className={`tab-panel ${activeTab === 'description' ? 'active' : ''}`}>
+                   <p>{product.description}</p>
+                   {product.richDescription && <p>{product.richDescription}</p>}
+                 </div>
+                 
+                 <div className={`tab-panel ${activeTab === 'details' ? 'active' : ''}`}>
+                   <ul className="details-list">
+                     {product.attributes ? (
+                       Object.entries(product.attributes).map(([key, value], index) => (
+                         <li key={index} className="detail-item">{key}: {value}</li>
+                       ))
+                     ) : (
+                       <>
+                         <li className="detail-item">Yüksek kaliteli premium kumaş</li>
+                         <li className="detail-item">Çevre dostu üretim</li>
+                         <li className="detail-item">Nefes alabilen yapı</li>
+                         <li className="detail-item">Uzun ömürlü dayanıklılık</li>
+                       </>
+                     )}
+                   </ul>
+                 </div>
+                 
+                 <div className={`tab-panel ${activeTab === 'care' ? 'active' : ''}`}>
+                   <ul className="care-list">
+                     <li className="care-item">Malzeme: %100 Pamuk</li>
+                     <li className="care-item">Soğuk suda yıkayınız</li>
+                     <li className="care-item">Düşük ısıda ütüleyiniz</li>
+                     <li className="care-item">Kuru temizleme yapılmaz</li>
+                     <li className="care-item">Çamaşır suyu kullanmayınız</li>
+                   </ul>
+                 </div>
+               </div>
+             </div>
+           </div>
+         </div>
+       </div>
+     </section>
+     
+     {/* Beden Kılavuzu Modal */}
+     {showSizeGuide && (
+       <div className="size-guide-modal" onClick={toggleSizeGuide}>
+         <div className="size-guide-content" onClick={(e) => e.stopPropagation()}>
+           <button className="size-guide-close" onClick={toggleSizeGuide}>
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+             </svg>
+           </button>
+           <h2 className="size-guide-title">Beden Kılavuzu</h2>
+           <div className="size-guide-table-container">
+             <table className="size-guide-table">
+               <thead>
+                 <tr>
+                   <th>Beden</th>
+                   <th>Göğüs (cm)</th>
+                   <th>Bel (cm)</th>
+                   <th>Kalça (cm)</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 <tr>
+                   <td>XS</td>
+                   <td>82-85</td>
+                   <td>60-63</td>
+                   <td>87-90</td>
+                 </tr>
+                 <tr>
+                   <td>S</td>
+                   <td>86-89</td>
+                   <td>64-67</td>
+                   <td>91-94</td>
+                 </tr>
+                 <tr>
+                   <td>M</td>
+                   <td>90-93</td>
+                   <td>68-71</td>
+                   <td>95-98</td>
+                 </tr>
+                 <tr>
+                   <td>L</td>
+                   <td>94-97</td>
+                   <td>72-75</td>
+                   <td>99-102</td>
+                 </tr>
+                 <tr>
+                   <td>XL</td>
+                   <td>98-101</td>
+                   <td>76-79</td>
+                   <td>103-106</td>
+                 </tr>
+               </tbody>
+             </table>
+           </div>
+           <div className="size-guide-notes">
+             <p>Not: Beden ölçüleri yaklaşık değerlerdir ve ürünün modeline göre değişiklik gösterebilir.</p>
+           </div>
+         </div>
+       </div>
+     )}
+     
+     {/* Benzer Ürünler - Bu kısmı daha sonra API'den gelen benzer ürünlerle dolduracağız */}
+     <section className="section similar-products-section">
+       <div className="container">
+         <h2 className="section-title">BENZER ÜRÜNLER</h2>
+         
+         <div className="products-grid">
+           {Array.from({ length: 4 }).map((_, index) => (
+             <Link 
+               key={index} 
+               href={`/urunler/similar-${index + 1}`}
+               className="product"
+             >
+               <div className="product-image-container">
+                 <img 
+                   src={`https://placehold.co/800x1100/${['000000', 'FFFFFF', 'F5F5DC', '8B0000'][index]}/FFFFFF/png?text=DOVL`}
+                   alt="Benzer Ürün"
+                   className="product-image"
+                 />
+                 
+                 <div className="product-tags">
+                   {index % 2 === 0 && (
+                     <span className="product-tag product-tag-discount">
+                       %30
+                     </span>
+                   )}
+                   
+                   {index % 3 === 0 && (
+                     <span className="product-tag product-tag-new">
+                       YENİ
+                     </span>
+                   )}
+                 </div>
+                 
+                 <div className="product-quick-view">
+                   HIZLI İNCELE
+                 </div>
+               </div>
+               
+               <h3 className="product-name">Benzer {product.name} Ürün {index + 1}</h3>
+               
+               <div className="product-price">
+                 {index % 2 === 0 ? (
+                   <>
+                     <span className="product-price-original">899.90TL</span>
+                     <span className="product-price-current">629.90TL</span>
+                   </>
+                 ) : (
+                   <span className="product-price-current">799.90TL</span>
+                 )}
+               </div>
+             </Link>
+           ))}
+         </div>
+       </div>
+     </section>
+   </main>
+ );
 }
