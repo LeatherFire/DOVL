@@ -47,7 +47,7 @@ class Cart(BaseModel):
         populate_by_name=True,
         arbitrary_types_allowed=True
     )
-    id: PyObjectId = Field(..., alias='_id')
+    id: Optional[PyObjectId] = Field(None, alias='_id')
     user: Optional[PyObjectId] = None
     sessionId: Optional[str] = None
     items: List[CartItem] = []

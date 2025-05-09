@@ -97,14 +97,16 @@ async def calculate_and_save_cart(cart_doc: dict, db: DBDep) -> dict:
         elif not isinstance(product_id, ObjectId):
             continue  # Geçersiz ObjectId
         
-        # Variant ve SKU kontrolü
-        variant_obj = item_data.get('variant', {})
-        if not variant_obj or not isinstance(variant_obj, dict):
-            variant_obj = {}
-            
-        variant_sku = variant_obj.get('sku')
+        # Variant ve SKU kontrolü - item_data'dan variantSku'yu doğrudan al
+        variant_sku = item_data.get('variantSku')
         if not variant_sku:
-            continue  # Geçersiz item, SKU yok
+            # Eğer variantSku doğrudan yoksa, variant objesi içinde kontrol et (geriye dönük uyumluluk)
+            variant_obj = item_data.get('variant', {})
+            if isinstance(variant_obj, dict):
+                variant_sku = variant_obj.get('sku')
+            
+            if not variant_sku:
+                continue  # Geçersiz item, SKU yok
 
         # Ürün kontrolü
         product = product_docs.get(product_id)
@@ -131,6 +133,9 @@ async def calculate_and_save_cart(cart_doc: dict, db: DBDep) -> dict:
         item_data['productName'] = product.get('name', 'Ürün')
         item_data['productSlug'] = product.get('slug', '')
         item_data['productImage'] = product.get('images', [{}])[0].get('url', '') if product.get('images') else ''  # İlk görseli al
+        
+        # variantSku alanını doğrudan ekle/güncelle
+        item_data['variantSku'] = variant_sku
         
         # Variant bilgilerini güncelle
         if not isinstance(item_data.get('variant'), dict):
@@ -369,6 +374,7 @@ async def add_item_to_cart(item_data: AddToCartRequest, request: Request, respon
         cart_doc = await carts_collection.find_one(identifier)
         if not cart_doc:
             cart_doc = {
+                "_id": ObjectId(),  # Yeni sepet için ObjectId oluştur
                 "items": [],
                 "subtotal": 0,
                 "discountAmount": 0,
@@ -377,6 +383,7 @@ async def add_item_to_cart(item_data: AddToCartRequest, request: Request, respon
                 "total": 0,
                 "campaign": None,
                 "createdAt": datetime.now(timezone.utc),
+                "updatedAt": datetime.now(timezone.utc),
                 **identifier
             }
             
@@ -399,8 +406,7 @@ async def add_item_to_cart(item_data: AddToCartRequest, request: Request, respon
                 product_match = True
                 
             if (product_match and 
-                isinstance(item.get('variant'), dict) and 
-                item.get('variant', {}).get('sku') == item_data.variantSku):
+                item.get('variantSku') == item_data.variantSku):
                 item_index = i
                 break
 
@@ -423,6 +429,7 @@ async def add_item_to_cart(item_data: AddToCartRequest, request: Request, respon
             new_item = {
                 "_id": ObjectId(),  # Yeni item için ID oluştur
                 "product": ObjectId(item_data.productId),
+                "variantSku": item_data.variantSku,  # variantSku'yu doğrudan ekle
                 "productName": product.get('name', 'Ürün'),
                 "productSlug": product.get('slug', ''),
                 "productImage": product_image,

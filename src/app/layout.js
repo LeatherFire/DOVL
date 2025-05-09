@@ -3,11 +3,15 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import './globals.css';
+import { getCart } from '../utils/api';
 
 export default function RootLayout({ children }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [cartItemCount, setCartItemCount] = useState(0);
+  const [cartUpdated, setCartUpdated] = useState(false);
   const pathname = usePathname();
   
   // Scroll olayını dinleyelim (sticky header için)
@@ -23,6 +27,72 @@ export default function RootLayout({ children }) {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+  
+  // Kullanıcı giriş durumunu kontrol et
+  useEffect(() => {
+    const checkLoginStatus = () => {
+      // localStorage'da token varsa kullanıcı giriş yapmış demektir
+      const token = localStorage.getItem('token');
+      setIsLoggedIn(!!token);
+    };
+    
+    // İlk sayfa yüklendiğinde kontrol et
+    checkLoginStatus();
+    
+    // LocalStorage değişikliklerini dinle
+    const handleStorageChange = () => {
+      checkLoginStatus();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Sepet sayısını yükle
+  useEffect(() => {
+    const loadCartCount = async () => {
+      try {
+        const response = await getCart();
+        const count = response.data?.items?.length || 0;
+        
+        if (count !== cartItemCount) {
+          setCartItemCount(count);
+          
+          // Eğer sepet sayısı değiştiyse animasyon için state'i güncelle
+          if (cartItemCount > 0) {
+            setCartUpdated(true);
+            // Animasyon bittikten sonra state'i sıfırla
+            setTimeout(() => setCartUpdated(false), 500);
+          }
+        }
+      } catch (error) {
+        console.error("Sepet bilgisi yüklenirken hata:", error);
+      }
+    };
+    
+    // İlk yüklendiğinde sepet sayısını al
+    loadCartCount();
+    
+    // Sepet güncellendiğinde event'i dinle
+    const handleCartUpdate = () => {
+      loadCartCount();
+    };
+    
+    if (typeof window !== "undefined") {
+      window.addEventListener('cartUpdated', handleCartUpdate);
+    }
+    
+    // Sayfa değiştiğinde de sepet sayısını kontrol et
+    if (pathname) {
+      loadCartCount();
+    }
+    
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener('cartUpdated', handleCartUpdate);
+      }
+    };
+  }, [pathname]);
 
   // Menüyü aç/kapat
   const toggleMenu = () => {
@@ -100,9 +170,9 @@ export default function RootLayout({ children }) {
 
                 {/* Hesap */}
                 <Link 
-                  href="/hesabim" 
+                  href={isLoggedIn ? "/hesabim" : "/giris"} 
                   className="header-icon"
-                  aria-label="Hesabım"
+                  aria-label={isLoggedIn ? "Hesabım" : "Giriş Yap"}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -129,7 +199,9 @@ export default function RootLayout({ children }) {
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
-                  <span className="cart-count">0</span>
+                  {cartItemCount > 0 && (
+                    <span className={`cart-count ${cartUpdated ? 'pulse' : ''}`}>{cartItemCount}</span>
+                  )}
                 </Link>
               </div>
             </div>
@@ -255,9 +327,20 @@ export default function RootLayout({ children }) {
               className="search-content"
               onClick={(e) => e.stopPropagation()}
             >
-              <form className="search-form">
+              <form 
+                className="search-form" 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const searchValue = e.target.elements.searchQuery.value.trim();
+                  if (searchValue) {
+                    setIsSearchOpen(false);
+                    window.location.href = `/arama?q=${encodeURIComponent(searchValue)}`;
+                  }
+                }}
+              >
                 <input 
                   type="text" 
+                  name="searchQuery"
                   className="search-input"
                   placeholder="Ne aramıştınız?" 
                   autoFocus={isSearchOpen}
@@ -403,6 +486,43 @@ export default function RootLayout({ children }) {
             </div>
           </div>
         </footer>
+
+        <style jsx global>{`
+          /* ... Diğer stiller ... */
+          
+          .cart-count {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background-color: var(--color-accent);
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            transition: transform 0.2s ease;
+          }
+          
+          .cart-count.pulse {
+            animation: pulse 0.5s ease-out;
+          }
+          
+          @keyframes pulse {
+            0% {
+              transform: scale(1);
+            }
+            50% {
+              transform: scale(1.3);
+            }
+            100% {
+              transform: scale(1);
+            }
+          }
+        `}</style>
       </body>
     </html>
   );

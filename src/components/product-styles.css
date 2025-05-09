@@ -1,0 +1,441 @@
+/* ProductCard Bileşeni Stilleri */
+.product-card-container {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s ease;
+  margin-bottom: 30px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.product-card-container:hover {
+  transform: translateY(-5px);
+}
+
+.product-image-container {
+  position: relative;
+  overflow: hidden;
+  background-color: #f5f5f5;
+  aspect-ratio: 3/4;
+}
+
+.product-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.product-image-container:hover .product-image {
+  transform: scale(1.05);
+}
+
+.product-tags {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 2;
+}
+
+.product-tag {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 2px;
+}
+
+.product-tag-discount {
+  background-color: var(--color-accent, #8B0000);
+  color: white;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  padding: 5px 9px;
+  border-radius: 4px;
+  transform: rotate(-3deg);
+}
+
+.product-tag-new {
+  background-color: var(--color-primary, #000);
+  color: white;
+}
+
+.product-quick-view {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  text-align: center;
+  padding: 10px 0;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  z-index: 10;
+}
+
+.product-image-container:hover .product-quick-view {
+  transform: translateY(0);
+}
+
+.product-name {
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text, #333);
+  text-align: center;
+}
+
+.product-price {
+  margin-top: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.product-price-original {
+  font-size: 14px;
+  color: var(--color-text-light, #999);
+  text-decoration: line-through;
+}
+
+.product-price-current {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text, #333);
+}
+
+/* Ürün Grid Düzeni */
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 25px;
+  margin-bottom: 40px;
+}
+
+@media (max-width: 768px) {
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 15px;
+  }
+}
+
+/* HoverQuickView Bileşeni Stilleri */
+.hover-quick-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  padding: 20px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.hover-quick-view-content {
+  background: white;
+  max-width: 900px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  padding: 25px;
+  border-radius: 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.hover-quick-view-close {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  z-index: 10;
+  color: #666;
+  transition: color 0.2s ease;
+}
+
+.hover-quick-view-close:hover {
+  color: #000;
+}
+
+.hover-quick-view-product {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+}
+
+@media (max-width: 768px) {
+  .hover-quick-view-product {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hover-quick-view-image {
+  display: flex;
+  flex-direction: column;
+}
+
+.hover-quick-view-image > img {
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.hover-quick-view-thumbnails {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.hover-quick-view-thumbnail {
+  width: 70px;
+  height: 70px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.hover-quick-view-thumbnail.active {
+  border-color: var(--color-primary, #333);
+}
+
+.hover-quick-view-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hover-quick-view-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.hover-quick-view-name {
+  font-size: 24px;
+  font-weight: 500;
+  margin-bottom: 15px;
+  color: var(--color-text, #333);
+}
+
+.hover-quick-view-price {
+  margin-bottom: 15px;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hover-quick-view-price-original {
+  color: var(--color-text-light, #999);
+  text-decoration: line-through;
+}
+
+.hover-quick-view-price-current {
+  font-weight: 600;
+  color: var(--color-text, #333);
+}
+
+.hover-quick-view-description {
+  margin-bottom: 20px;
+  color: var(--color-text-light, #666);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.hover-quick-view-sizes h4, 
+.hover-quick-view-quantity h4 {
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-text, #333);
+}
+
+.hover-quick-view-size-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.size-option {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  background: white;
+  cursor: pointer;
+  min-width: 40px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.size-option.selected {
+  border-color: var(--color-primary, #000);
+  background: var(--color-primary, #000);
+  color: white;
+}
+
+.size-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.quantity-selector {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.quantity-button {
+  width: 35px;
+  height: 35px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.quantity-button:hover:not(:disabled) {
+  background: #eaeaea;
+}
+
+.quantity-input {
+  width: 50px;
+  height: 35px;
+  border: 1px solid #ddd;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.quantity-input::-webkit-outer-spin-button,
+.quantity-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.hover-quick-view-message {
+  padding: 10px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.hover-quick-view-message.error {
+  background-color: #fff0f0;
+  color: #e53e3e;
+  border: 1px solid #f5b7b7;
+}
+
+.hover-quick-view-message.success {
+  background-color: #f0fff4;
+  color: #38a169;
+  border: 1px solid #b7f5c6;
+}
+
+.hover-quick-view-actions {
+  display: flex;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.add-to-cart-button,
+.view-details-button {
+  flex: 1;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+  border-radius: 2px;
+}
+
+.add-to-cart-button {
+  background: var(--color-primary, #000);
+  color: white;
+  border: none;
+}
+
+.add-to-cart-button:disabled {
+  background: #999;
+  cursor: not-allowed;
+}
+
+.view-details-button {
+  background: white;
+  color: var(--color-primary, #000);
+  border: 1px solid var(--color-primary, #000);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-to-cart-button:hover:not(:disabled) {
+  background: #333;
+}
+
+.view-details-button:hover {
+  background: #f5f5f5;
+}
+
+/* Hızlı İnceleme Modalı için Overlay Stilleri */
+.quick-view-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  padding: 20px;
+}
+
+.hover-quick-view-inner {
+  position: relative;
+  background: white;
+  width: 90%;
+  max-width: 900px;
+  max-height: 90vh;
+  border-radius: 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  overflow-y: auto;
+  z-index: 2010;
+  margin-top: 30px; 
+} 

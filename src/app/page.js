@@ -1,14 +1,236 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { getProducts, getCategories } from "../utils/api";
+import { getProducts, getCategories, addToCart } from "../utils/api";
+import HoverQuickViewWrapper from "../components/HoverQuickViewWrapper";
+import ProductCard from "../components/ProductCard";
+import "../components/product-styles.css";
+// Swiper için gerekli importlar
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Navigation, Pagination, Autoplay } from "swiper/modules";
+// Swiper stilleri
+import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/pagination";
+
+// QuickView Modal Komponenti
+const QuickViewModal = ({ product, isOpen, onClose }) => {
+  const [selectedImage, setSelectedImage] = useState(0);
+  const [selectedSize, setSelectedSize] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [message, setMessage] = useState({ type: "", text: "" });
+
+  // Ürün yüklendiğinde varsayılan beden seçimi
+  useEffect(() => {
+    if (product && product.variants && product.variants.length > 0) {
+      // Stokta olan ilk bedeni seç
+      const availableVariant = product.variants.find(v => v.stock > 0);
+      if (availableVariant) {
+        setSelectedSize(availableVariant.size);
+      }
+    }
+  }, [product]);
+
+  // Sepete ekleme fonksiyonu
+  const handleAddToCart = async () => {
+    if (!selectedSize) {
+      setMessage({ type: "error", text: "Lütfen bir beden seçiniz" });
+      return;
+    }
+
+    const selectedVariant = product.variants.find(v => v.size === selectedSize);
+    if (!selectedVariant) {
+      setMessage({ type: "error", text: "Seçilen beden bulunamadı" });
+      return;
+    }
+
+    if (selectedVariant.stock < quantity) {
+      setMessage({ 
+        type: "error", 
+        text: `Seçilen miktar için yeterli stok yok. Mevcut stok: ${selectedVariant.stock}` 
+      });
+      return;
+    }
+
+    setAddingToCart(true);
+    try {
+      await addToCart({
+        productId: product.id || product._id,
+        variantSku: selectedVariant.sku,
+        quantity: quantity
+      });
+
+      setMessage({ type: "success", text: "Ürün sepetinize eklendi!" });
+      
+      // 3 saniye sonra mesajı temizle
+      setTimeout(() => {
+        setMessage({ type: "", text: "" });
+      }, 3000);
+    } catch (error) {
+      console.error("Sepete eklerken hata:", error);
+      setMessage({ 
+        type: "error", 
+        text: error.message || "Sepete eklerken bir hata oluştu" 
+      });
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
+  // Modal açık değilse hiçbir şey render etme
+  if (!isOpen || !product) return null;
+
+  return (
+    <div className="quick-view-modal" onClick={onClose}>
+      <div className="quick-view-content" onClick={e => e.stopPropagation()}>
+        <button className="quick-view-close" onClick={onClose}>
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <div className="quick-view-grid">
+          {/* Sol - Ürün Görselleri */}
+          <div className="quick-view-images">
+            <div className="main-image">
+              <img 
+                src={product.images && product.images.length > 0 
+                  ? product.images[selectedImage]?.url 
+                  : "https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL"
+                }
+                alt={product.name}
+              />
+            </div>
+            
+            {product.images && product.images.length > 1 && (
+              <div className="image-thumbnails">
+                {product.images.slice(0, 4).map((image, index) => (
+                  <div 
+                    key={index} 
+                    className={`image-thumbnail ${selectedImage === index ? 'active' : ''}`}
+                    onClick={() => setSelectedImage(index)}
+                  >
+                    <img src={image.url} alt={`${product.name} - ${index + 1}`} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Sağ - Ürün Bilgileri */}
+          <div className="quick-view-details">
+            <h2 className="quick-view-title">{product.name}</h2>
+            
+            <div className="quick-view-price">
+              {product.salePrice ? (
+                <>
+                  <span className="price-original">{product.price.toFixed(2)}TL</span>
+                  <span className="price-current">{product.salePrice.toFixed(2)}TL</span>
+                </>
+              ) : (
+                <span className="price-current">{product.price.toFixed(2)}TL</span>
+              )}
+            </div>
+
+            <div className="quick-view-description">
+              <p>{product.description}</p>
+            </div>
+
+            {/* Beden Seçimi */}
+            <div className="quick-view-sizes">
+              <h3>Beden:</h3>
+              <div className="size-options">
+                {product.variants && product.variants.map((variant) => {
+                  const isSelected = selectedSize === variant.size;
+                  const isDisabled = variant.stock <= 0;
+
+                  return (
+                    <button
+                      key={variant.sku}
+                      className={`size-option ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                      onClick={() => !isDisabled && setSelectedSize(variant.size)}
+                      disabled={isDisabled}
+                    >
+                      {variant.size}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Miktar Seçimi */}
+            <div className="quick-view-quantity">
+              <h3>Adet:</h3>
+              <div className="quantity-selector">
+                <button 
+                  className="quantity-button"
+                  onClick={() => quantity > 1 && setQuantity(quantity - 1)}
+                  disabled={quantity <= 1}
+                >
+                  -
+                </button>
+                <input 
+                  type="number" 
+                  value={quantity} 
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    if (value > 0) setQuantity(value);
+                  }} 
+                  min="1"
+                  className="quantity-input"
+                />
+                <button 
+                  className="quantity-button"
+                  onClick={() => setQuantity(quantity + 1)}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Mesaj Alanı */}
+            {message.text && (
+              <div className={`quick-view-message ${message.type}`}>
+                {message.text}
+              </div>
+            )}
+
+            {/* Sepete Ekle ve Ürün Detayı Butonları */}
+            <div className="quick-view-actions">
+              <button 
+                className="add-to-cart-button"
+                onClick={handleAddToCart}
+                disabled={addingToCart}
+              >
+                {addingToCart ? "EKLENİYOR..." : "SEPETE EKLE"}
+              </button>
+              
+              <button 
+                className="view-details-button"
+                onClick={() => window.location.href = `/urunler/${product.slug || product.id}`}
+              >
+                ÜRÜN DETAYLARI
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [popularProducts, setPopularProducts] = useState([]);
   const [newProducts, setNewProducts] = useState([]);
+  const [similarProducts, setSimilarProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Hızlı inceleme için state'ler
+  const [quickViewOpen, setQuickViewOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   // Mock veriler
   const sliderData = [
@@ -40,16 +262,23 @@ export default function HomePage() {
         // Popüler ürünleri getir (isFeatured=true parametresi ile)
         const popularProductsResponse = await getProducts(
           { isFeatured: true },
-          { limit: 4 }
+          { limit: 10 } // Limit artırıldı
         );
         setPopularProducts(popularProductsResponse.data);
 
         // Yeni ürünleri getir (isNew=true parametresi ile)
         const newProductsResponse = await getProducts(
           { isNew: true },
-          { limit: 4 }
+          { limit: 10 } // Limit artırıldı
         );
         setNewProducts(newProductsResponse.data);
+        
+        // Benzer ürünleri getir (normal ürünler)
+        const similarProductsResponse = await getProducts(
+          {},
+          { limit: 10 } // Benzer ürünler için limit
+        );
+        setSimilarProducts(similarProductsResponse.data);
 
         // Kategorileri getir
         const categoriesResponse = await getCategories();
@@ -82,6 +311,25 @@ export default function HomePage() {
 
   const prevSlide = () => {
     setCurrentSlide((prev) => (prev === 0 ? sliderData.length - 1 : prev - 1));
+  };
+
+  // Hızlı inceleme modalını açma fonksiyonu
+  const openQuickView = (product, e) => {
+    if (e) {
+      e.preventDefault(); // Link yönlendirmesini engelle
+      e.stopPropagation(); // Event'in başka elementlere geçmesini engelle
+    }
+    setSelectedProduct(product);
+    setQuickViewOpen(true);
+  };
+
+  // Hızlı inceleme modalını kapatma fonksiyonu
+  const closeQuickView = () => {
+    setQuickViewOpen(false);
+    // Modalı kapattıktan kısa bir süre sonra seçili ürünü temizle
+    setTimeout(() => {
+      setSelectedProduct(null);
+    }, 300);
   };
 
   return (
@@ -216,64 +464,29 @@ export default function HomePage() {
               <p>Ürünler yükleniyor...</p>
             </div>
           ) : (
-            <div className="products-grid">
-              {popularProducts.map((product) => (
-                <Link
-                  key={product.id || product._id}
-                  href={`/urunler/${product.slug || product.id}`}
-                  className="product"
-                >
-                  <div className="product-image-container">
-                    <img
-                      src={
-                        product.images && product.images.length > 0
-                          ? product.images[0].url
-                          : "https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL"
-                      }
-                      alt={product.name}
-                      className="product-image"
+            <div className="products-carousel">
+              <Swiper
+                modules={[Navigation, Pagination]}
+                spaceBetween={20}
+                slidesPerView={4}
+                navigation
+                pagination={{ clickable: true }}
+                breakpoints={{
+                  320: { slidesPerView: 1, spaceBetween: 10 },
+                  640: { slidesPerView: 2, spaceBetween: 15 },
+                  768: { slidesPerView: 3, spaceBetween: 15 },
+                  1024: { slidesPerView: 4, spaceBetween: 20 },
+                }}
+              >
+                {popularProducts.map((product, index) => (
+                  <SwiperSlide key={`popular-${product.id || product._id || index}`}>
+                    <ProductCard 
+                      product={product} 
+                      onQuickView={openQuickView}
                     />
-
-                    <div className="product-tags">
-                      {product.salePrice && (
-                        <span className="product-tag product-tag-discount">
-                          {Math.round(
-                            (1 - product.salePrice / product.price) * 100
-                          )}
-                          %
-                        </span>
-                      )}
-
-                      {product.isNew && (
-                        <span className="product-tag product-tag-new">
-                          YENİ
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="product-quick-view">HIZLI İNCELE</div>
-                  </div>
-
-                  <h3 className="product-name">{product.name}</h3>
-
-                  <div className="product-price">
-                    {product.salePrice ? (
-                      <>
-                        <span className="product-price-original">
-                          {product.price.toFixed(2)}TL
-                        </span>
-                        <span className="product-price-current">
-                          {product.salePrice.toFixed(2)}TL
-                        </span>
-                      </>
-                    ) : (
-                      <span className="product-price-current">
-                        {product.price.toFixed(2)}TL
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              ))}
+                  </SwiperSlide>
+                ))}
+              </Swiper>
             </div>
           )}
         </div>
@@ -384,64 +597,68 @@ export default function HomePage() {
               <p>Ürünler yükleniyor...</p>
             </div>
           ) : (
-            <div className="products-grid">
-              {newProducts.map((product) => (
-                <Link
-                  key={product.id || product._id}
-                  href={`/urunler/${product.slug || product.id}`}
-                  className="product"
-                >
-                  <div className="product-image-container">
-                    <img
-                      src={
-                        product.images && product.images.length > 0
-                          ? product.images[0].url
-                          : "https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL"
-                      }
-                      alt={product.name}
-                      className="product-image"
+            <div className="products-carousel">
+              <Swiper
+                modules={[Navigation, Pagination]}
+                spaceBetween={20}
+                slidesPerView={4}
+                navigation
+                pagination={{ clickable: true }}
+                breakpoints={{
+                  320: { slidesPerView: 1, spaceBetween: 10 },
+                  640: { slidesPerView: 2, spaceBetween: 15 },
+                  768: { slidesPerView: 3, spaceBetween: 15 },
+                  1024: { slidesPerView: 4, spaceBetween: 20 },
+                }}
+              >
+                {newProducts.map((product, index) => (
+                  <SwiperSlide key={`new-${product.id || product._id || index}`}>
+                    <ProductCard 
+                      product={product} 
+                      onQuickView={openQuickView}
                     />
+                  </SwiperSlide>
+                ))}
+              </Swiper>
+            </div>
+          )}
+        </div>
+      </section>
 
-                    <div className="product-tags">
-                      {product.salePrice && (
-                        <span className="product-tag product-tag-discount">
-                          {Math.round(
-                            (1 - product.salePrice / product.price) * 100
-                          )}
-                          %
-                        </span>
-                      )}
+      {/* Benzer Ürünler */}
+      <section className="section">
+        <div className="container">
+          <h2 className="section-title">BENZER ÜRÜNLER</h2>
 
-                      {product.isNew && (
-                        <span className="product-tag product-tag-new">
-                          YENİ
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="product-quick-view">HIZLI İNCELE</div>
-                  </div>
-
-                  <h3 className="product-name">{product.name}</h3>
-
-                  <div className="product-price">
-                    {product.salePrice ? (
-                      <>
-                        <span className="product-price-original">
-                          {product.price.toFixed(2)}TL
-                        </span>
-                        <span className="product-price-current">
-                          {product.salePrice.toFixed(2)}TL
-                        </span>
-                      </>
-                    ) : (
-                      <span className="product-price-current">
-                        {product.price.toFixed(2)}TL
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              ))}
+          {isLoading ? (
+            <div className="loading-container">
+              <div className="loading-spinner"></div>
+              <p>Ürünler yükleniyor...</p>
+            </div>
+          ) : (
+            <div className="products-carousel">
+              <Swiper
+                modules={[Navigation, Pagination]}
+                spaceBetween={20}
+                slidesPerView={4}
+                navigation
+                pagination={{ clickable: true }}
+                breakpoints={{
+                  320: { slidesPerView: 1, spaceBetween: 10 },
+                  640: { slidesPerView: 2, spaceBetween: 15 },
+                  768: { slidesPerView: 3, spaceBetween: 15 },
+                  1024: { slidesPerView: 4, spaceBetween: 20 },
+                }}
+              >
+                {similarProducts.map((product, index) => (
+                  <SwiperSlide key={`similar-${product.id || product._id || index}`}>
+                    <ProductCard 
+                      product={product} 
+                      onQuickView={openQuickView}
+                    />
+                  </SwiperSlide>
+                ))}
+              </Swiper>
             </div>
           )}
         </div>
@@ -510,6 +727,336 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* QuickView Modal */}
+      {selectedProduct && (
+        <QuickViewModal
+          product={selectedProduct}
+          isOpen={quickViewOpen}
+          onClose={closeQuickView}
+        />
+      )}
+
+      {/* Hızlı İnceleme stil kuralları */}
+      <style jsx global>{`
+        .product-card-container {
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .product-image-container {
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .product-quick-view {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background-color: rgba(0, 0, 0, 0.7);
+          color: white;
+          text-align: center;
+          padding: 10px 0;
+          transform: translateY(100%);
+          transition: transform 0.3s ease;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          letter-spacing: 1px;
+          z-index: 10;
+        }
+        
+        .product-image-container:hover .product-quick-view {
+          transform: translateY(0);
+        }
+        
+        /* Hızlı İnceleme Modal Stilleri */
+        .quick-view-modal {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1000;
+          padding: 20px;
+        }
+        
+        .quick-view-content {
+          background: white;
+          max-width: 1000px;
+          width: 90%;
+          max-height: 90vh;
+          overflow-y: auto;
+          position: relative;
+          padding: 25px;
+          border-radius: 8px;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .quick-view-close {
+          position: absolute;
+          top: 15px;
+          right: 15px;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          z-index: 10;
+        }
+        
+        .quick-view-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 30px;
+        }
+        
+        @media (max-width: 768px) {
+          .quick-view-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+        
+        .quick-view-images {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .main-image {
+          width: 100%;
+          margin-bottom: 15px;
+        }
+        
+        .main-image img {
+          width: 100%;
+          height: auto;
+          object-fit: cover;
+        }
+        
+        .image-thumbnails {
+          display: flex;
+          gap: 10px;
+        }
+        
+        .image-thumbnail {
+          width: 70px;
+          height: 70px;
+          cursor: pointer;
+          border: 2px solid transparent;
+        }
+        
+        .image-thumbnail.active {
+          border-color: #333;
+        }
+        
+        .image-thumbnail img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        
+        .quick-view-details {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .quick-view-title {
+          font-size: 24px;
+          font-weight: 500;
+          margin-bottom: 15px;
+        }
+        
+        .quick-view-price {
+          margin-bottom: 15px;
+          font-size: 18px;
+        }
+        
+        .price-original {
+          text-decoration: line-through;
+          color: #999;
+          margin-right: 10px;
+        }
+        
+        .price-current {
+          font-weight: 600;
+          color: #000;
+        }
+        
+        .quick-view-description {
+          margin-bottom: 20px;
+          color: #555;
+          line-height: 1.5;
+        }
+        
+        .quick-view-sizes h3,
+        .quick-view-quantity h3 {
+          margin-bottom: 10px;
+          font-size: 16px;
+          font-weight: 500;
+        }
+        
+        .size-options {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-bottom: 20px;
+        }
+        
+        .size-option {
+          padding: 8px 12px;
+          border: 1px solid #ddd;
+          background: white;
+          cursor: pointer;
+          min-width: 40px;
+          text-align: center;
+        }
+        
+        .size-option.selected {
+          border-color: #000;
+          background: #000;
+          color: white;
+        }
+        
+        .size-option.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          text-decoration: line-through;
+        }
+        
+        .quantity-selector {
+          display: flex;
+          align-items: center;
+          margin-bottom: 20px;
+        }
+        
+        .quantity-button {
+          width: 35px;
+          height: 35px;
+          background: #f5f5f5;
+          border: 1px solid #ddd;
+          font-size: 18px;
+          cursor: pointer;
+        }
+        
+        .quantity-input {
+          width: 50px;
+          height: 35px;
+          border: 1px solid #ddd;
+          text-align: center;
+          margin: 0 5px;
+        }
+        
+        .quick-view-message {
+          padding: 10px;
+          margin-bottom: 20px;
+          border-radius: 4px;
+        }
+        
+        .quick-view-message.error {
+          background-color: #fff0f0;
+          color: #e53e3e;
+          border: 1px solid #f5b7b7;
+        }
+        
+        .quick-view-message.success {
+          background-color: #f0fff4;
+          color: #38a169;
+          border: 1px solid #b7f5c6;
+        }
+        
+        .quick-view-actions {
+          display: flex;
+          gap: 15px;
+        }
+        
+        .add-to-cart-button {
+          flex: 1;
+          padding: 12px 20px;
+          background-color: #000;
+          color: white;
+          border: none;
+          cursor: pointer;
+          font-weight: 500;
+          letter-spacing: 1px;
+          transition: background-color 0.3s ease;
+        }
+        
+        .add-to-cart-button:hover {
+          background-color: #333;
+        }
+        
+        .view-details-button {
+          flex: 1;
+          padding: 12px 20px;
+          background-color: white;
+          color: #000;
+          border: 1px solid #000;
+          text-align: center;
+          font-weight: 500;
+          letter-spacing: 1px;
+          transition: all 0.3s ease;
+        }
+        
+        .view-details-button:hover {
+          background-color: #f5f5f5;
+        }
+        
+        /* Swiper Carousel Stilleri */
+        .products-carousel {
+          position: relative;
+          margin: 0 -10px 40px;
+          padding: 0 10px;
+        }
+        
+        .products-carousel .swiper-button-next,
+        .products-carousel .swiper-button-prev {
+          color: #000;
+          background: rgba(255, 255, 255, 0.8);
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .products-carousel .swiper-button-next:after,
+        .products-carousel .swiper-button-prev:after {
+          font-size: 16px;
+          font-weight: bold;
+        }
+        
+        .products-carousel .swiper-button-disabled {
+          opacity: 0.35;
+        }
+        
+        .products-carousel .swiper-pagination {
+          bottom: -30px;
+        }
+        
+        .products-carousel .swiper-pagination-bullet {
+          width: 8px;
+          height: 8px;
+        }
+        
+        .products-carousel .swiper-pagination-bullet-active {
+          background: #000;
+        }
+        
+        @media (max-width: 768px) {
+          .products-carousel .swiper-button-next,
+          .products-carousel .swiper-button-prev {
+            width: 30px;
+            height: 30px;
+          }
+          
+          .products-carousel .swiper-button-next:after,
+          .products-carousel .swiper-button-prev:after {
+            font-size: 14px;
+          }
+        }
+      `}</style>
     </main>
   );
 }

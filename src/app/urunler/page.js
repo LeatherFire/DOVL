@@ -1,11 +1,12 @@
 "use client";
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { getProducts, getCategories, addToCart } from '../../../utils/api';
-import HoverQuickViewWrapper from "../../../components/HoverQuickViewWrapper";
+import { getProducts, getCategories, addToCart } from '../../utils/api';
+import HoverQuickViewWrapper from '../../components/HoverQuickViewWrapper';
+import ProductCard from '../../components/ProductCard';
+import "../../components/product-styles.css";
 
-// QuickView Modal Komponenti
+// Ürün Hızlı İnceleme Komponenti
 const QuickViewModal = ({ product, isOpen, onClose }) => {
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState("");
@@ -133,7 +134,7 @@ const QuickViewModal = ({ product, isOpen, onClose }) => {
             <div className="quick-view-sizes">
               <h3>Beden:</h3>
               <div className="size-options">
-                {product.variants && product.variants.map((variant) => {
+                {product.variants.map((variant) => {
                   const isSelected = selectedSize === variant.size;
                   const isDisabled = variant.stock <= 0;
 
@@ -212,15 +213,13 @@ const QuickViewModal = ({ product, isOpen, onClose }) => {
   );
 };
 
-export default function CategoryPage() {
-  const params = useParams();
-  const { slug } = params;
-  
+export default function ProductsPage() {
   const [products, setProducts] = useState([]);
-  const [categoryInfo, setCategoryInfo] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSort, setSelectedSort] = useState("new");
   const [selectedFilters, setSelectedFilters] = useState({
+    category: [],
     size: [],
     color: [],
     price: []
@@ -233,57 +232,88 @@ export default function CategoryPage() {
     totalPages: 0
   });
   
-  // QuickView için state'ler
+  // Hızlı inceleme için yeni state'ler
   const [quickViewOpen, setQuickViewOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   
-  // Kategori başlığını formatlama
-  const formatCategoryTitle = (slug) => {
-    // Örnek: 'elbise' -> 'ELBİSE'
-    // Türkçe karakterleri düzgün ele almalıyız
-    const categoryMap = {
-      'elbise': 'ELBİSE',
-      'bluz': 'BLUZ',
-      'etek': 'ETEK',
-      'pantolon': 'PANTOLON',
-      'aksesuar': 'AKSESUAR',
-      'ceket': 'CEKET',
-      'yaz-koleksiyonu': 'YAZ KOLEKSİYONU'
-    };
-    
-    return categoryMap[slug] || slug.toUpperCase();
-  };
+  // Boyut ve renk seçenekleri
+  const sizes = ["XS", "S", "M", "L", "XL"];
+  const colors = [
+    { name: "Siyah", hex: "#000000" },
+    { name: "Beyaz", hex: "#FFFFFF" },
+    { name: "Kırmızı", hex: "#FF0000" },
+    { name: "Mavi", hex: "#0000FF" },
+    { name: "Yeşil", hex: "#008000" },
+    { name: "Sarı", hex: "#FFFF00" },
+    { name: "Pembe", hex: "#FFC0CB" },
+    { name: "Mor", hex: "#800080" },
+  ];
+  
+  // Fiyat aralıkları
+  const priceRanges = [
+    { id: "0-300", label: "0 TL - 300 TL" },
+    { id: "300-500", label: "300 TL - 500 TL" },
+    { id: "500-1000", label: "500 TL - 1000 TL" },
+    { id: "1000+", label: "1000 TL ve üzeri" }
+  ];
   
   useEffect(() => {
-    const loadCategoryProducts = async () => {
+    const loadCategories = async () => {
+      try {
+        const response = await getCategories();
+        setCategories(response.data || []);
+      } catch (error) {
+        console.error("Kategoriler yüklenirken hata:", error);
+      }
+    };
+    
+    loadCategories();
+  }, []);
+  
+  useEffect(() => {
+    const loadProducts = async () => {
       setIsLoading(true);
       try {
-        // Kategori bilgilerini ve ürünlerini getir
-        const categoriesResponse = await getCategories();
-        const foundCategory = categoriesResponse.data.find(cat => cat.slug === slug);
-        if (foundCategory) {
-          setCategoryInfo(foundCategory);
+        // Kategori filtresi
+        let categoryFilter = {};
+        if (selectedFilters.category.length > 0) {
+          categoryFilter = { category: selectedFilters.category[0] };
         }
         
-        // Seçilen sıralama ve filtrelere göre ürünleri getir
+        // Fiyat filtresi
         const minPrice = selectedFilters.price.find(p => p.includes('0-300')) ? 0 : null;
         const maxPrice = selectedFilters.price.find(p => p.includes('1000+')) ? null : 
                         selectedFilters.price.find(p => p.includes('500-1000')) ? 1000 :
                         selectedFilters.price.find(p => p.includes('300-500')) ? 500 : 
                         selectedFilters.price.find(p => p.includes('0-300')) ? 300 : null;
         
+        const filters = {
+          ...categoryFilter,
+          minPrice,
+          maxPrice
+        };
+        
+        const sortMapping = {
+          "new": "createdAt_desc",
+          "price_asc": "price_asc",
+          "price_high": "price_desc",
+          "discount": "discount_desc",
+          "name": "name_asc"
+        };
+        
         const productsResponse = await getProducts(
-          { 
-            category: slug,
-            minPrice,
-            maxPrice,
-          }, 
+          filters, 
           { page: pagination.page, limit: pagination.limit }, 
-          selectedSort
+          sortMapping[selectedSort] || "createdAt_desc"
         );
         
-        setProducts(productsResponse.data);
-        setPagination(productsResponse.pagination);
+        setProducts(productsResponse.data || []);
+        setPagination(productsResponse.pagination || {
+          total: 0,
+          page: 1,
+          limit: 12,
+          totalPages: 0
+        });
       } catch (error) {
         console.error("Ürünler yüklenirken hata:", error);
       } finally {
@@ -291,12 +321,24 @@ export default function CategoryPage() {
       }
     };
     
-    loadCategoryProducts();
-  }, [slug, pagination.page, selectedSort, selectedFilters]);
+    loadProducts();
+  }, [pagination.page, selectedSort, selectedFilters]);
   
   // Filtreleri Uygulama
   const applyFilters = () => {
     // Sayfayı ilk sayfaya döndür ve filtreleri uygula
+    setPagination(prev => ({...prev, page: 1}));
+    setIsFilterOpen(false);
+  };
+  
+  // Filtreleri temizleme
+  const clearFilters = () => {
+    setSelectedFilters({
+      category: [],
+      size: [],
+      color: [],
+      price: []
+    });
     setPagination(prev => ({...prev, page: 1}));
   };
   
@@ -310,27 +352,35 @@ export default function CategoryPage() {
     setSelectedFilters(prev => {
       const newFilters = { ...prev };
       
-      if (newFilters[filterType].includes(value)) {
-        // Eğer zaten seçili ise kaldır
-        newFilters[filterType] = newFilters[filterType].filter(item => item !== value);
+      // Kategori için sadece bir seçim yapılabilir
+      if (filterType === 'category') {
+        if (newFilters[filterType].includes(value)) {
+          newFilters[filterType] = [];
+        } else {
+          newFilters[filterType] = [value];
+        }
       } else {
-        // Seçili değilse ekle
-        newFilters[filterType] = [...newFilters[filterType], value];
+        // Diğer filtreler için çoklu seçim
+        if (newFilters[filterType].includes(value)) {
+          // Eğer zaten seçili ise kaldır
+          newFilters[filterType] = newFilters[filterType].filter(item => item !== value);
+        } else {
+          // Seçili değilse ekle
+          newFilters[filterType] = [...newFilters[filterType], value];
+        }
       }
       
       return newFilters;
     });
   };
   
-  // Filtreleri temizleme
-  const clearFilters = () => {
-    setSelectedFilters({
-      size: [],
-      color: [],
-      price: []
-    });
+  // Sayfa değiştirme
+  const changePage = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setPagination(prev => ({...prev, page: newPage}));
+    }
   };
-  
+
   // Hızlı inceleme modalını açma fonksiyonu
   const openQuickView = (product, e) => {
     if (e) {
@@ -352,140 +402,138 @@ export default function CategoryPage() {
   
   return (
     <main>
-      {/* Kategori Banner */}
+      {/* Ürünler Banner */}
       <section className="category-banner">
         <div className="category-banner-image" style={{ backgroundImage: "url('https://placehold.co/1920x400/1A1A1A/FFFFFF/png?text=DOVL')" }}></div>
         <div className="category-banner-overlay"></div>
         <div className="category-banner-content">
-          <h1 className="category-banner-title">{categoryInfo?.name || formatCategoryTitle(slug)}</h1>
+          <h1 className="category-banner-title">ÜRÜNLER</h1>
         </div>
       </section>
       
       {/* Ürün Listeleme */}
-      <section className="section category-section">
+      <section className="category-section">
         <div className="container">
-          <div className="category-content">
-            {/* Filtre Butonu (Mobil) */}
-            <div className="filter-mobile-controls">
-              <button className="filter-mobile-toggle" onClick={toggleFilter}>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                Filtreler
-              </button>
+          {/* Mobil Filtre Kontrolleri */}
+          <div className="filter-mobile-controls">
+            <button className="filter-mobile-toggle" onClick={toggleFilter}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="18" height="18">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4h18M3 8h18M3 12h18M3 16h18M3 20h18" />
+              </svg>
+              Filtre ve Sıralama
+            </button>
+            
+            <div className="sort-mobile">
+              <select 
+                className="sort-select"
+                value={selectedSort}
+                onChange={(e) => setSelectedSort(e.target.value)}
+              >
+                <option value="new">Yeni Gelenler</option>
+                <option value="price_asc">Fiyat (Düşükten Yükseğe)</option>
+                <option value="price_high">Fiyat (Yüksekten Düşüğe)</option>
+                <option value="discount">İndirim Oranı</option>
+                <option value="name">İsim (A-Z)</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className={`category-layout ${isFilterOpen ? 'filter-open' : ''}`}>
+            {/* Filtre Paneli */}
+            <div className="filter-panel">
+              <div className="filter-panel-header">
+                <h2 className="filter-panel-title">Filtreler</h2>
+                <button className="filter-clear" onClick={clearFilters}>
+                  Temizle
+                </button>
+                <button className="filter-close-mobile" onClick={toggleFilter}>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
               
-              <div className="sort-mobile">
-                <select 
-                  className="sort-select" 
-                  value={selectedSort}
-                  onChange={(e) => setSelectedSort(e.target.value)}
-                >
-                  <option value="new">Yeni Gelenler</option>
-                  <option value="price_asc">Fiyat (Düşükten Yükseğe)</option>
-                  <option value="price_high">Fiyat (Yüksekten Düşüğe)</option>
-                  <option value="discount">İndirim Oranı</option>
-                  <option value="name">İsim (A-Z)</option>
-                </select>
+              {/* Kategori Filtresi */}
+              <div className="filter-group">
+                <h3 className="filter-group-title">Kategori</h3>
+                <div className="filter-options">
+                  {categories.map((category) => (
+                    <label key={category.id || category._id} className="filter-checkbox">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedFilters.category.includes(category.slug)}
+                        onChange={() => handleFilterChange('category', category.slug)}
+                      />
+                      <span className="checkbox-text">{category.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Beden Filtresi */}
+              <div className="filter-group">
+                <h3 className="filter-group-title">Beden</h3>
+                <div className="filter-options">
+                  {sizes.map((size) => (
+                    <label key={size} className="filter-checkbox">
+                      <input 
+                        type="checkbox"
+                        checked={selectedFilters.size.includes(size)}
+                        onChange={() => handleFilterChange('size', size)}
+                      />
+                      <span className="checkbox-text">{size}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Renk Filtresi */}
+              <div className="filter-group">
+                <h3 className="filter-group-title">Renk</h3>
+                <div className="filter-colors">
+                  {colors.map((color) => (
+                    <label key={color.name} className="filter-color">
+                      <input 
+                        type="checkbox"
+                        checked={selectedFilters.color.includes(color.name)}
+                        onChange={() => handleFilterChange('color', color.name)}
+                      />
+                      <span 
+                        className="color-swatch" 
+                        style={{ backgroundColor: color.hex, border: color.hex === "#FFFFFF" ? "1px solid #ddd" : "none" }}
+                      ></span>
+                      <span className="color-name">{color.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Fiyat Filtresi */}
+              <div className="filter-group">
+                <h3 className="filter-group-title">Fiyat</h3>
+                <div className="filter-options">
+                  {priceRanges.map((range) => (
+                    <label key={range.id} className="filter-checkbox">
+                      <input 
+                        type="checkbox"
+                        checked={selectedFilters.price.includes(range.id)}
+                        onChange={() => handleFilterChange('price', range.id)}
+                      />
+                      <span className="checkbox-text">{range.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Mobil Uygula Butonu */}
+              <div className="filter-apply-mobile">
+                <button className="filter-apply-button" onClick={applyFilters}>
+                  Filtreleri Uygula
+                </button>
               </div>
             </div>
             
-            <div className={`category-layout ${isFilterOpen ? 'filter-open' : ''}`}>
-              {/* Filtre Paneli */}
-              <aside className="filter-panel">
-                <div className="filter-panel-header">
-                  <h3 className="filter-panel-title">Filtreler</h3>
-                  <button className="filter-clear" onClick={clearFilters}>Temizle</button>
-                  <button className="filter-close-mobile" onClick={toggleFilter}>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                
-                {/* Beden Filtresi */}
-                <div className="filter-group">
-                  <h4 className="filter-group-title">Beden</h4>
-                  <div className="filter-options">
-                    {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map(size => (
-                      <label key={size} className="filter-checkbox">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedFilters.size.includes(size)}
-                          onChange={() => handleFilterChange('size', size)}
-                        />
-                        <span className="checkbox-text">{size}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Renk Filtresi */}
-                <div className="filter-group">
-                  <h4 className="filter-group-title">Renk</h4>
-                  <div className="filter-options filter-colors">
-                    {[
-                      { name: 'Siyah', hex: '#000000' },
-                      { name: 'Beyaz', hex: '#FFFFFF' },
-                      { name: 'Kırmızı', hex: '#FF0000' },
-                      { name: 'Mavi', hex: '#0000FF' },
-                      { name: 'Yeşil', hex: '#008000' },
-                      { name: 'Sarı', hex: '#FFFF00' },
-                      { name: 'Pembe', hex: '#FFC0CB' },
-                      { name: 'Mor', hex: '#800080' }
-                    ].map(color => (
-                      <label key={color.name} className="filter-color">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedFilters.color.includes(color.name)}
-                          onChange={() => handleFilterChange('color', color.name)}
-                        />
-                        <span 
-                          className="color-swatch" 
-                          style={{ 
-                            backgroundColor: color.hex,
-                            border: color.name === 'Beyaz' ? '1px solid #e0e0e0' : 'none'
-                          }}
-                        ></span>
-                        <span className="color-name">{color.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Fiyat Filtresi */}
-                <div className="filter-group">
-                  <h4 className="filter-group-title">Fiyat Aralığı</h4>
-                  <div className="filter-options">
-                    {[
-                      { label: '0 TL - 300 TL', value: '0-300' },
-                      { label: '300 TL - 500 TL', value: '300-500' },
-                      { label: '500 TL - 1000 TL', value: '500-1000' },
-                      { label: '1000 TL ve üzeri', value: '1000+' }
-                    ].map(range => (
-                      <label key={range.value} className="filter-checkbox">
-                        <input 
-                          type="checkbox" 
-                          checked={selectedFilters.price.includes(range.value)}
-                          onChange={() => handleFilterChange('price', range.value)}
-                        />
-                        <span className="checkbox-text">{range.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Filtreleri Uygula Butonu (Mobil) */}
-                <div className="filter-apply-mobile">
-                  <button className="filter-apply-button" onClick={() => {
-                    applyFilters();
-                    setIsFilterOpen(false);
-                  }}>
-                    Filtreleri Uygula
-                  </button>
-                </div>
-              </aside>
-              
-              {/* Ürün Grid */}
+            <div className="category-content">
               <div className="category-products">
                 {/* Sıralama ve Ürün Sayısı */}
                 <div className="products-header">
@@ -512,107 +560,73 @@ export default function CategoryPage() {
                 
                 {/* Ürünler */}
                 {isLoading ? (
-                  <div className="loading-container">
+                  <div className="products-loading">
                     <div className="loading-spinner"></div>
                     <p>Ürünler yükleniyor...</p>
                   </div>
                 ) : products.length === 0 ? (
-                  <div className="no-results">
-                    <h3>Ürün Bulunamadı</h3>
-                    <p>Arama kriterlerinize uygun ürün bulunamadı. Lütfen filtrelerinizi değiştirin veya tüm ürünleri görüntüleyin.</p>
-                    <button className="btn" onClick={clearFilters}>Filtreleri Temizle</button>
+                  <div className="products-empty">
+                    <p>Kriterlere uygun ürün bulunamadı.</p>
                   </div>
                 ) : (
                   <div className="products-grid">
-                    {products.map((product) => (
-                      <HoverQuickViewWrapper key={product.id || product._id} product={product}>
-                        <div className="product-card-container">
-                          <Link href={`/urunler/${product.slug || product.id}`} className="product">
-                            <div className="product-image-container">
-                              <img
-                                src={
-                                  product.images && product.images.length > 0
-                                    ? product.images[0].url
-                                    : "https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL"
-                                }
-                                alt={product.name}
-                                className="product-image"
-                              />
-                              
-                              <div className="product-tags">
-                                {product.salePrice && (
-                                  <span className="product-tag product-tag-discount">
-                                    {Math.round((1 - product.salePrice / product.price) * 100)}%
-                                  </span>
-                                )}
-                                
-                                {product.isNew && (
-                                  <span className="product-tag product-tag-new">
-                                    YENİ
-                                  </span>
-                                )}
-                              </div>
-                              
-                              <div 
-                                className="product-quick-view"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  openQuickView(product, e);
-                                }}
-                              >
-                                HIZLI İNCELE
-                              </div>
-                            </div>
-                            
-                            <h3 className="product-name">{product.name}</h3>
-                            
-                            <div className="product-price">
-                              {product.salePrice ? (
-                                <>
-                                  <span className="product-price-original">
-                                    {product.price.toFixed(2)}TL
-                                  </span>
-                                  <span className="product-price-current">
-                                    {product.salePrice.toFixed(2)}TL
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="product-price-current">
-                                  {product.price.toFixed(2)}TL
-                                </span>
-                              )}
-                            </div>
-                          </Link>
-                        </div>
-                      </HoverQuickViewWrapper>
+                    {products.map((product, index) => (
+                      <ProductCard 
+                        key={`product-${product.id || product._id || index}`} 
+                        product={product} 
+                        onQuickView={openQuickView}
+                      />
                     ))}
                   </div>
                 )}
-
+                
                 {/* Sayfalama */}
-                {!isLoading && products.length > 0 && pagination.totalPages > 1 && (
-                  <div className="pagination-container" style={{ display: 'flex', justifyContent: 'center', margin: '2rem 0' }}>
+                {!isLoading && pagination.totalPages > 1 && (
+                  <div className="pagination">
                     <button 
-                      onClick={() => setPagination(prev => ({...prev, page: Math.max(1, prev.page - 1)}))}
-                      disabled={pagination.page <= 1}
-                      className="btn btn-outline"
-                      style={{ margin: '0 0.5rem' }}
+                      className="pagination-button"
+                      onClick={() => changePage(pagination.page - 1)}
+                      disabled={pagination.page === 1}
                     >
-                      &lt; Önceki
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="18" height="18">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
+                      </svg>
                     </button>
                     
-                    <span style={{ margin: '0 1rem', display: 'flex', alignItems: 'center' }}>
-                      Sayfa {pagination.page} / {pagination.totalPages}
-                    </span>
+                    {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                      .filter(page => 
+                        page === 1 || 
+                        page === pagination.totalPages || 
+                        (page >= pagination.page - 1 && page <= pagination.page + 1)
+                      )
+                      .map((page, index, array) => {
+                        // Sayfa boşluğu gösterme
+                        if (index > 0 && array[index - 1] !== page - 1) {
+                          return (
+                            <span key={`gap-${page}`} className="pagination-gap">...</span>
+                          );
+                        }
+                        
+                        return (
+                          <button 
+                            key={page} 
+                            className={`pagination-page ${pagination.page === page ? 'active' : ''}`}
+                            onClick={() => changePage(page)}
+                          >
+                            {page}
+                          </button>
+                        );
+                      })
+                    }
                     
                     <button 
-                      onClick={() => setPagination(prev => ({...prev, page: Math.min(prev.totalPages, prev.page + 1)}))}
-                      disabled={pagination.page >= pagination.totalPages}
-                      className="btn btn-outline"
-                      style={{ margin: '0 0.5rem' }}
+                      className="pagination-button"
+                      onClick={() => changePage(pagination.page + 1)}
+                      disabled={pagination.page === pagination.totalPages}
                     >
-                      Sonraki &gt;
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="18" height="18">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
+                      </svg>
                     </button>
                   </div>
                 )}
@@ -621,17 +635,14 @@ export default function CategoryPage() {
           </div>
         </div>
       </section>
-
-      {/* QuickView Modal */}
-      {selectedProduct && (
-        <QuickViewModal 
-          product={selectedProduct}
-          isOpen={quickViewOpen}
-          onClose={closeQuickView}
-        />
-      )}
-
-      {/* Hızlı İnceleme stil kuralları */}
+      
+      {/* Hızlı İnceleme Modalı */}
+      <QuickViewModal 
+        product={selectedProduct} 
+        isOpen={quickViewOpen} 
+        onClose={closeQuickView} 
+      />
+      
       <style jsx global>{`
         .product-card-container {
           position: relative;
@@ -838,27 +849,28 @@ export default function CategoryPage() {
         .quantity-input {
           width: 50px;
           height: 35px;
-          border: 1px solid #ddd;
           text-align: center;
-          margin: 0 5px;
+          border: 1px solid #ddd;
+          border-left: none;
+          border-right: none;
         }
         
         .quick-view-message {
           padding: 10px;
-          margin-bottom: 20px;
+          margin-bottom: 15px;
           border-radius: 4px;
         }
         
         .quick-view-message.error {
-          background-color: #fff0f0;
-          color: #e53e3e;
-          border: 1px solid #f5b7b7;
+          background: #ffe6e6;
+          color: #d32f2f;
+          border: 1px solid #ffcccc;
         }
         
         .quick-view-message.success {
-          background-color: #f0fff4;
-          color: #38a169;
-          border: 1px solid #b7f5c6;
+          background: #e8f5e9;
+          color: #2e7d32;
+          border: 1px solid #c8e6c9;
         }
         
         .quick-view-actions {
@@ -866,38 +878,47 @@ export default function CategoryPage() {
           gap: 15px;
         }
         
-        .add-to-cart-button {
-          flex: 1;
-          padding: 12px 20px;
-          background-color: #000;
-          color: white;
-          border: none;
-          cursor: pointer;
-          font-weight: 500;
-          letter-spacing: 1px;
-          transition: background-color 0.3s ease;
-        }
-        
-        .add-to-cart-button:hover {
-          background-color: #333;
-        }
-        
+        .add-to-cart-button,
         .view-details-button {
           flex: 1;
           padding: 12px 20px;
-          background-color: white;
-          color: #000;
-          border: 1px solid #000;
-          text-align: center;
+          font-size: 14px;
           font-weight: 500;
           letter-spacing: 1px;
+          cursor: pointer;
           transition: all 0.3s ease;
+          text-align: center;
+        }
+        
+        .add-to-cart-button {
+          background: #000;
+          color: white;
+          border: none;
+        }
+        
+        .add-to-cart-button:disabled {
+          background: #999;
+          cursor: not-allowed;
+        }
+        
+        .view-details-button {
+          background: white;
+          color: #000;
+          border: 1px solid #000;
+          text-decoration: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .add-to-cart-button:hover:not(:disabled) {
+          background: #333;
         }
         
         .view-details-button:hover {
-          background-color: #f5f5f5;
+          background: #f5f5f5;
         }
       `}</style>
     </main>
   );
-}
+} 

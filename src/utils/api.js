@@ -26,6 +26,7 @@ export async function fetchAPI(endpoint, options = {}) {
   const config = {
     ...options,
     headers,
+    credentials: 'include', // Çerezleri göndermek ve almak için
   };
 
   try {
@@ -42,7 +43,25 @@ export async function fetchAPI(endpoint, options = {}) {
       throw new Error("Oturum süresi doldu. Lütfen tekrar giriş yapın.");
     }
 
-    const data = await response.json();
+    // 404 hatası için özel davranış - liste istekleri için boş dizi döndür
+    if (response.status === 404) {
+      // Eğer favorites, addresses veya orders endpoint'lerine istek yapılmışsa boş dizi döndür
+      if (endpoint === "/favorites" || endpoint === "/addresses" || endpoint === "/orders") {
+        console.log(`Not found for ${endpoint}, returning empty array`);
+        return [];
+      }
+    }
+
+    // Yanıt JSON olarak parse edilebilir mi kontrol et
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      if (response.status === 404) {
+        throw new Error("Not Found");
+      }
+      throw new Error("Geçersiz yanıt formatı");
+    }
 
     if (!response.ok) {
       throw new Error(data.detail || "Bir hata oluştu");
@@ -265,8 +284,6 @@ export async function getSimilarProducts(productId, limit = 4) {
   return fetchAPI(`/products/similar/${productId}?limit=${limit}`);
 }
 
-// src/utils/api.js dosyasına eklenecek yeni fonksiyonlar
-
 /**
  * Şifre sıfırlama linki talep eden fonksiyon
  * @param {string} email - Kullanıcı email adresi
@@ -336,5 +353,93 @@ export async function changePassword(passwords) {
   return fetchAPI("/users/me/password", {
     method: "PUT",
     body: JSON.stringify(passwords),
+  });
+}
+
+/**
+ * Favorileri getiren fonksiyon
+ * @returns {Promise} Favori ürünlerin listesi
+ */
+export async function getFavorites() {
+  return fetchAPI("/favorites");
+}
+
+/**
+ * Ürünü favorilere ekleyen fonksiyon
+ * @param {string} productId - Ürün ID'si
+ * @returns {Promise} Güncellenen favori listesi
+ */
+export async function addToFavorites(productId) {
+  return fetchAPI("/favorites", {
+    method: "POST",
+    body: JSON.stringify({ productId }),
+  });
+}
+
+/**
+ * Ürünü favorilerden çıkaran fonksiyon
+ * @param {string} favoriteId - Favori ID'si
+ * @returns {Promise} Güncellenen favori listesi
+ */
+export async function removeFromFavorites(favoriteId) {
+  return fetchAPI(`/favorites/${favoriteId}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * Adresleri getiren fonksiyon
+ * @returns {Promise} Adres listesi
+ */
+export async function getAddresses() {
+  return fetchAPI("/addresses");
+}
+
+/**
+ * Yeni adres ekleyen fonksiyon
+ * @param {Object} addressData - Adres verileri
+ * @returns {Promise} Eklenen adres
+ */
+export async function addAddress(addressData) {
+  return fetchAPI("/addresses", {
+    method: "POST",
+    body: JSON.stringify(addressData),
+  });
+}
+
+/**
+ * Adres güncelleyen fonksiyon
+ * @param {string} addressId - Adres ID'si
+ * @param {Object} addressData - Güncellenecek adres verileri
+ * @returns {Promise} Güncellenen adres
+ */
+export async function updateAddress(addressId, addressData) {
+  return fetchAPI(`/addresses/${addressId}`, {
+    method: "PUT",
+    body: JSON.stringify(addressData),
+  });
+}
+
+/**
+ * Adres silen fonksiyon
+ * @param {string} addressId - Adres ID'si
+ * @returns {Promise} Silme işlemi sonucu
+ */
+export async function removeAddress(addressId) {
+  return fetchAPI(`/addresses/${addressId}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * Varsayılan adres ayarlayan fonksiyon
+ * @param {string} addressId - Adres ID'si
+ * @param {string} type - Adres tipi ('shipping', 'billing' veya 'both')
+ * @returns {Promise} İşlem sonucu
+ */
+export async function setDefaultAddress(addressId, type) {
+  return fetchAPI(`/addresses/${addressId}/default`, {
+    method: "PUT",
+    body: JSON.stringify({ type }),
   });
 }

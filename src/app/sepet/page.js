@@ -10,6 +10,8 @@ export default function CartPage() {
   const [couponError, setCouponError] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
   const [itemsLoading, setItemsLoading] = useState({});
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
   
   // Sepet verilerini yükleme
   useEffect(() => {
@@ -21,6 +23,12 @@ export default function CartPage() {
     try {
       const response = await getCart();
       setCart(response.data);
+      
+      // Sepet güncellendiğinde bir event tetikle
+      // Bu event, layout.js'deki sepet sayısını güncelleyecek
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
     } catch (error) {
       console.error("Sepet yüklenirken hata:", error);
     } finally {
@@ -34,6 +42,11 @@ export default function CartPage() {
     try {
       const response = await updateCartItem(itemId, newQuantity);
       setCart(response.data);
+      
+      // Sepet güncellendiğinde bir event tetikle
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
     } catch (error) {
       console.error("Ürün miktarı güncellenirken hata:", error);
     } finally {
@@ -43,17 +56,44 @@ export default function CartPage() {
   
   // Ürünü sepetten çıkarma
   const handleRemoveItem = async (itemId) => {
-    if (!confirm("Bu ürünü sepetten çıkarmak istediğinize emin misiniz?")) {
-      return;
-    }
-    
     setItemsLoading(prev => ({ ...prev, [itemId]: true }));
     try {
       const response = await removeCartItem(itemId);
       setCart(response.data);
+      
+      // Sepet güncellendiğinde bir event tetikle
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
     } catch (error) {
       console.error("Ürün silinirken hata:", error);
     }
+  };
+  
+  // Sepeti tamamen temizleme
+  const handleClearCart = () => {
+    // Onay modalını göster
+    setConfirmAction(() => async () => {
+      // Tüm sepeti temizle - sırayla silme
+      try {
+        // Sonraki işlemde kullanmak için ürün ID'lerini kopyala
+        const itemIds = [...cart.items.map(item => item._id)];
+        
+        // Her ürünü sırayla sil
+        for (const itemId of itemIds) {
+          await removeCartItem(itemId);
+        }
+        
+        // İşlem tamamlandığında sepeti yeniden yükle
+        await loadCart();
+      } catch (error) {
+        console.error("Sepet temizlenirken hata:", error);
+      } finally {
+        // Modal'ı kapat
+        setShowConfirmModal(false);
+      }
+    });
+    setShowConfirmModal(true);
   };
   
   // Kupon kodu uygulama
@@ -69,6 +109,11 @@ export default function CartPage() {
       const response = await applyCoupon(couponCode);
       setCart(response.data);
       setCouponCode('');
+      
+      // Sepet güncellendiğinde bir event tetikle
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
     } catch (error) {
       console.error("Kupon uygulanırken hata:", error);
       setCouponError(error.message || 'Geçersiz kupon kodu.');
@@ -82,6 +127,11 @@ export default function CartPage() {
     try {
       const response = await removeCoupon();
       setCart(response.data);
+      
+      // Sepet güncellendiğinde bir event tetikle
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
     } catch (error) {
       console.error("Kupon kaldırılırken hata:", error);
     }
@@ -132,7 +182,7 @@ export default function CartPage() {
             {/* Sepet Ürünleri */}
             <div className="cart-items">
               {cart.items.map(item => (
-                <div key={item.id} className="cart-item">
+                <div key={item._id} className="cart-item">
                   <div className="cart-item-product">
                     <Link href={`/urunler/${item.productSlug || item.product}`} className="cart-item-image">
                       <img src={item.productImage || `https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL`} alt={item.productName} />
@@ -163,8 +213,8 @@ export default function CartPage() {
                     <div className="quantity-selector">
                       <button 
                         className="quantity-button" 
-                        onClick={() => handleUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
-                        disabled={itemsLoading[item.id] || item.quantity <= 1}
+                        onClick={() => handleUpdateQuantity(item._id, Math.max(1, item.quantity - 1))}
+                        disabled={itemsLoading[item._id] || item.quantity <= 1}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 12H4" />
@@ -177,16 +227,16 @@ export default function CartPage() {
                         onChange={(e) => {
                           const value = parseInt(e.target.value);
                           if (value > 0) {
-                            handleUpdateQuantity(item.id, value);
+                            handleUpdateQuantity(item._id, value);
                           }
                         }}
                         min="1"
-                        disabled={itemsLoading[item.id]}
+                        disabled={itemsLoading[item._id]}
                       />
                       <button 
                         className="quantity-button" 
-                        onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                        disabled={itemsLoading[item.id]}
+                        onClick={() => handleUpdateQuantity(item._id, item.quantity + 1)}
+                        disabled={itemsLoading[item._id]}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
@@ -196,7 +246,7 @@ export default function CartPage() {
                   </div>
                   
                   <div className="cart-item-total">
-                    {itemsLoading[item.id] ? (
+                    {itemsLoading[item._id] ? (
                       <div className="loading-spinner" style={{ width: '20px', height: '20px' }}></div>
                     ) : (
                       <>{item.subtotal.toFixed(2)}TL</>
@@ -205,9 +255,9 @@ export default function CartPage() {
                   
                   <div className="cart-item-remove">
                     <button 
-                      onClick={() => handleRemoveItem(item.id)} 
+                      onClick={() => handleRemoveItem(item._id)} 
                       className="remove-button"
-                      disabled={itemsLoading[item.id]}
+                      disabled={itemsLoading[item._id]}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="18" height="18">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
@@ -229,11 +279,7 @@ export default function CartPage() {
               
               <button 
                 className="btn btn-outline cart-clear" 
-                onClick={() => {
-                  if (confirm("Sepetinizdeki tüm ürünleri silmek istediğinize emin misiniz?")) {
-                    cart.items.forEach(item => handleRemoveItem(item.id));
-                  }
-                }}
+                onClick={handleClearCart}
               >
                 SEPETİ TEMİZLE
               </button>
@@ -330,6 +376,116 @@ export default function CartPage() {
           </div>
         </div>
       </div>
+      
+      {/* Onay Modal */}
+      {showConfirmModal && (
+        <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Sepeti Temizle</h3>
+              <button className="modal-close" onClick={() => setShowConfirmModal(false)}>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Sepetinizdeki tüm ürünleri silmek istediğinize emin misiniz?</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setShowConfirmModal(false)}>Vazgeç</button>
+              <button className="btn btn-danger" onClick={confirmAction}>Sepeti Temizle</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <style jsx>{`
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1000;
+          padding: 0 20px;
+        }
+        
+        .modal-container {
+          background: white;
+          width: 100%;
+          max-width: 450px;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 20px 24px;
+          border-bottom: 1px solid #e5e5e5;
+        }
+        
+        .modal-header h3 {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 600;
+        }
+        
+        .modal-close {
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          padding: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #666;
+        }
+        
+        .modal-close:hover {
+          color: #000;
+        }
+        
+        .modal-body {
+          padding: 24px;
+        }
+        
+        .modal-body p {
+          margin: 0;
+          font-size: 16px;
+          line-height: 1.5;
+          color: #333;
+        }
+        
+        .modal-footer {
+          padding: 16px 24px 24px;
+          display: flex;
+          justify-content: flex-end;
+          gap: 12px;
+        }
+        
+        .btn-danger {
+          background-color: #e53e3e;
+          color: white;
+          border: none;
+          padding: 10px 20px;
+          border-radius: 4px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: background-color 0.2s;
+        }
+        
+        .btn-danger:hover {
+          background-color: #c53030;
+        }
+      `}</style>
     </main>
   );
 }

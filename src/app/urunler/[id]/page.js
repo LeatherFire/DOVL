@@ -6,7 +6,338 @@ import {
   getProductById,
   getSimilarProducts,
   addToCart,
+  addToFavorites,
 } from "../../../utils/api";
+import HoverQuickViewWrapper from "../../../components/HoverQuickViewWrapper";
+import ProductCard from "../../../components/ProductCard";
+import "../../../components/product-styles.css";
+// Swiper için gerekli importlar
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Navigation, Pagination } from "swiper/modules";
+// Swiper stilleri
+import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/pagination";
+import { motion, AnimatePresence } from "framer-motion";
+
+// Modal animasyon varyantları
+const modalVariants = {
+  hidden: { 
+    opacity: 0,
+    scale: 0.95,
+    y: 20
+  },
+  visible: { 
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      damping: 25,
+      stiffness: 500,
+      duration: 0.3,
+      when: "beforeChildren",
+      staggerChildren: 0.1
+    }
+  },
+  exit: { 
+    opacity: 0,
+    scale: 0.95,
+    y: -10,
+    transition: {
+      duration: 0.2,
+      ease: "easeOut"
+    }
+  }
+};
+
+// İçerik animasyonları
+const contentVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: { duration: 0.3 } 
+  }
+};
+
+// QuickViewModal Komponenti
+const QuickViewModal = ({ product, isOpen, onClose }) => {
+  const [selectedImage, setSelectedImage] = useState(0);
+  const [selectedSize, setSelectedSize] = useState("");
+  const [quantity, setQuantity] = useState(1);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [message, setMessage] = useState({ type: "", text: "" });
+
+  // Ürün yüklendiğinde varsayılan beden seçimi
+  useEffect(() => {
+    if (product && product.variants && product.variants.length > 0) {
+      // Stokta olan ilk bedeni seç
+      const availableVariant = product.variants.find(v => v.stock > 0);
+      if (availableVariant) {
+        setSelectedSize(availableVariant.size);
+      }
+    }
+  }, [product]);
+
+  // Sepete ekleme fonksiyonu
+  const handleAddToCart = async () => {
+    if (!selectedSize) {
+      setMessage({ type: "error", text: "Lütfen bir beden seçiniz" });
+      return;
+    }
+
+    const selectedVariant = product.variants.find(v => v.size === selectedSize);
+    if (!selectedVariant) {
+      setMessage({ type: "error", text: "Seçilen beden bulunamadı" });
+      return;
+    }
+
+    if (selectedVariant.stock < quantity) {
+      setMessage({ 
+        type: "error", 
+        text: `Seçilen miktar için yeterli stok yok. Mevcut stok: ${selectedVariant.stock}` 
+      });
+      return;
+    }
+
+    setAddingToCart(true);
+    try {
+      await addToCart({
+        productId: product.id || product._id,
+        variantSku: selectedVariant.sku,
+        quantity: quantity
+      });
+
+      setMessage({ type: "success", text: "Ürün sepetinize eklendi!" });
+      
+      // 3 saniye sonra mesajı temizle
+      setTimeout(() => {
+        setMessage({ type: "", text: "" });
+      }, 3000);
+    } catch (error) {
+      console.error("Sepete eklerken hata:", error);
+      setMessage({ 
+        type: "error", 
+        text: error.message || "Sepete eklerken bir hata oluştu" 
+      });
+    } finally {
+      setAddingToCart(false);
+    }
+  };
+
+  // Modal açık değilse hiçbir şey render etme
+  if (!isOpen || !product) return null;
+
+  return (
+    <motion.div 
+      className="quick-view-modal" 
+      onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div 
+        className="quick-view-content" 
+        onClick={e => e.stopPropagation()}
+        variants={modalVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+      >
+        <motion.button 
+          className="quick-view-close" 
+          onClick={onClose}
+          whileHover={{ scale: 1.1, rotate: 90 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="24" height="24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </motion.button>
+
+        <div className="quick-view-grid">
+          {/* Sol - Ürün Görselleri */}
+          <motion.div 
+            className="quick-view-images"
+            variants={contentVariants}
+          >
+            <div className="main-image">
+              <motion.img 
+                src={product.images && product.images.length > 0 
+                  ? product.images[selectedImage]?.url 
+                  : "https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL"
+                }
+                alt={product.name}
+                key={selectedImage}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+            
+            {product.images && product.images.length > 1 && (
+              <motion.div 
+                className="image-thumbnails"
+                variants={contentVariants}
+              >
+                {product.images.slice(0, 4).map((image, index) => (
+                  <motion.div 
+                    key={index} 
+                    className={`image-thumbnail ${selectedImage === index ? 'active' : ''}`}
+                    onClick={() => setSelectedImage(index)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <img src={image.url} alt={`${product.name} - ${index + 1}`} />
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </motion.div>
+
+          {/* Sağ - Ürün Bilgileri */}
+          <motion.div 
+            className="quick-view-details"
+            variants={contentVariants}
+          >
+            <motion.h2 
+              className="quick-view-title"
+              variants={contentVariants}
+            >
+              {product.name}
+            </motion.h2>
+            
+            <motion.div 
+              className="quick-view-price"
+              variants={contentVariants}
+            >
+              {product.salePrice ? (
+                <>
+                  <span className="price-original">{product.price.toFixed(2)}TL</span>
+                  <span className="price-current">{product.salePrice.toFixed(2)}TL</span>
+                </>
+              ) : (
+                <span className="price-current">{product.price.toFixed(2)}TL</span>
+              )}
+            </motion.div>
+
+            <motion.div 
+              className="quick-view-description"
+              variants={contentVariants}
+            >
+              <p>{product.description}</p>
+            </motion.div>
+
+            {/* Beden Seçimi */}
+            <motion.div 
+              className="quick-view-sizes"
+              variants={contentVariants}
+            >
+              <h3>Beden:</h3>
+              <div className="size-options">
+                {product.variants && product.variants.map((variant) => {
+                  const isSelected = selectedSize === variant.size;
+                  const isDisabled = variant.stock <= 0;
+
+                  return (
+                    <motion.button
+                      key={variant.sku}
+                      className={`size-option ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+                      onClick={() => !isDisabled && setSelectedSize(variant.size)}
+                      disabled={isDisabled}
+                      whileHover={!isDisabled ? { scale: 1.05, y: -2 } : {}}
+                      whileTap={!isDisabled ? { scale: 0.95 } : {}}
+                    >
+                      {variant.size}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </motion.div>
+
+            {/* Miktar Seçimi */}
+            <motion.div 
+              className="quick-view-quantity"
+              variants={contentVariants}
+            >
+              <h3>Adet:</h3>
+              <div className="quantity-selector">
+                <motion.button 
+                  className="quantity-button"
+                  onClick={() => quantity > 1 && setQuantity(quantity - 1)}
+                  disabled={quantity <= 1}
+                  whileHover={quantity > 1 ? { scale: 1.1 } : {}}
+                  whileTap={quantity > 1 ? { scale: 0.9 } : {}}
+                >
+                  -
+                </motion.button>
+                <input 
+                  type="number" 
+                  value={quantity} 
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    if (value > 0) setQuantity(value);
+                  }} 
+                  min="1"
+                  className="quantity-input"
+                />
+                <motion.button 
+                  className="quantity-button"
+                  onClick={() => setQuantity(quantity + 1)}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  +
+                </motion.button>
+              </div>
+            </motion.div>
+
+            {/* Mesaj Alanı */}
+            {message.text && (
+              <motion.div 
+                className={`quick-view-message ${message.type}`}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+              >
+                {message.text}
+              </motion.div>
+            )}
+
+            {/* Sepete Ekle ve Ürün Detayı Butonları */}
+            <motion.div 
+              className="quick-view-actions"
+              variants={contentVariants}
+            >
+              <motion.button 
+                className="add-to-cart-button"
+                onClick={handleAddToCart}
+                disabled={addingToCart}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                {addingToCart ? "EKLENİYOR..." : "SEPETE EKLE"}
+              </motion.button>
+              
+              <motion.div
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                <Link 
+                  href={`/urunler/${product.slug || product.id}`}
+                  className="view-details-button"
+                >
+                  ÜRÜN DETAYLARI
+                </Link>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -16,6 +347,7 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState("");
+  const [selectedColor, setSelectedColor] = useState("");
   const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [activeTab, setActiveTab] = useState("description");
@@ -24,6 +356,10 @@ export default function ProductDetailPage() {
 
   const [similarProducts, setSimilarProducts] = useState([]);
   const [similarLoading, setSimilarLoading] = useState(true);
+  
+  // Hızlı inceleme için state'ler
+  const [quickViewOpen, setQuickViewOpen] = useState(false);
+  const [selectedQuickProduct, setSelectedQuickProduct] = useState(null);
 
   // Ürün verisi yükleme
   useEffect(() => {
@@ -33,9 +369,24 @@ export default function ProductDetailPage() {
         const data = await getProductById(id);
         setProduct(data);
 
-        // Eğer varyantlar varsa ilk varyantın bedenini seç
+        // Varsayılan renk seçimi - ilk rengi al
         if (data.variants && data.variants.length > 0) {
-          setSelectedSize(data.variants[0].size);
+          const uniqueColors = Array.from(new Set(data.variants.map(v => v.colorName)));
+          if (uniqueColors.length > 0) {
+            setSelectedColor(uniqueColors[0]);
+            
+            // Seçilen renk için stokta olan ilk bedeni seç
+            const colorVariants = data.variants.filter(v => v.colorName === uniqueColors[0]);
+            if (colorVariants.length > 0) {
+              const availableVariant = colorVariants.find(v => v.stock > 0);
+              if (availableVariant) {
+                setSelectedSize(availableVariant.size);
+              } else {
+                // Stokta yoksa ilk bedeni seç
+                setSelectedSize(colorVariants[0].size);
+              }
+            }
+          }
         }
 
         // Benzer ürünleri getir
@@ -57,6 +408,27 @@ export default function ProductDetailPage() {
 
     fetchProduct();
   }, [id]);
+
+  // Renk değiştirildiğinde o renge ait stokta olan ilk bedeni seç
+  useEffect(() => {
+    if (product && selectedColor) {
+      const colorVariants = product.variants.filter(v => v.colorName === selectedColor);
+      if (colorVariants.length > 0) {
+        const availableVariant = colorVariants.find(v => v.stock > 0);
+        if (availableVariant) {
+          setSelectedSize(availableVariant.size);
+        } else {
+          // Stokta yoksa ilk bedeni seç
+          setSelectedSize(colorVariants[0].size);
+        }
+      }
+    }
+  }, [selectedColor, product]);
+
+  // Renk seçimi fonksiyonu
+  const handleColorSelect = (color) => {
+    setSelectedColor(color);
+  };
 
   // Boyut kılavuzunu göster/gizle
   const toggleSizeGuide = () => {
@@ -114,6 +486,12 @@ export default function ProductDetailPage() {
       });
 
       setCartMessage({ type: "success", message: "Ürün sepetinize eklendi!" });
+      
+      // Sepet güncellendiğinde cartUpdated event'ini tetikle
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event('cartUpdated'));
+      }
+      
       // Başarı mesajı belirli bir süre sonra kaybolsun
       setTimeout(() => {
         setCartMessage({ type: "", message: "" });
@@ -130,14 +508,67 @@ export default function ProductDetailPage() {
   };
 
   // Favorilere ekleme
-  const addToWishlist = () => {
-    setCartMessage({
-      type: "info",
-      message: "Favorilere ekleme özelliği yakında eklenecek!",
-    });
-    setTimeout(() => {
-      setCartMessage({ type: "", message: "" });
-    }, 3000);
+  const addToWishlist = async () => {
+    try {
+      setCartMessage({ type: "info", message: "Favorilere ekleniyor..." });
+      
+      const response = await addToFavorites(product.id || product._id);
+      
+      setCartMessage({ type: "success", message: "Ürün favorilerinize eklendi!" });
+      
+      setTimeout(() => {
+        setCartMessage({ type: "", message: "" });
+      }, 3000);
+    } catch (error) {
+      console.error("Favorilere eklerken hata:", error);
+      
+      // Eğer ürün zaten favorilerde ise
+      if (error.message.includes("zaten favorilerinizde")) {
+        setCartMessage({
+          type: "info",
+          message: "Bu ürün zaten favorilerinizde."
+        });
+      } else {
+        setCartMessage({
+          type: "error",
+          message: error.message || "Favorilere eklerken bir hata oluştu"
+        });
+      }
+      
+      setTimeout(() => {
+        setCartMessage({ type: "", message: "" });
+      }, 3000);
+    }
+  };
+
+  // Hızlı inceleme modalını açma fonksiyonu
+  const openQuickView = (product, e) => {
+    if (e) {
+      e.preventDefault(); // Link yönlendirmesini engelle
+      e.stopPropagation(); // Event'in başka elementlere geçmesini engelle
+    }
+    setSelectedQuickProduct(product);
+    setQuickViewOpen(true);
+  };
+
+  // Hızlı inceleme modalını kapatma fonksiyonu
+  const closeQuickView = () => {
+    setQuickViewOpen(false);
+  };
+
+  // Seçili renge göre bedenleri filtrele
+  const getFilteredSizes = () => {
+    if (!product || !selectedColor) return [];
+    
+    return product.variants
+      .filter(v => v.colorName === selectedColor)
+      .sort((a, b) => {
+        // Beden sıralaması için yardımcı fonksiyon
+        const sizeOrder = { "XS": 1, "S": 2, "M": 3, "L": 4, "XL": 5, "XXL": 6 };
+        const aOrder = sizeOrder[a.size] || 999;
+        const bOrder = sizeOrder[b.size] || 999;
+        return aOrder - bOrder;
+      });
   };
 
   if (loading) {
@@ -161,9 +592,14 @@ export default function ProductDetailPage() {
     );
   }
 
-  // Seçili varyanı bul
-  const selectedVariant = product.variants.find((v) => v.size === selectedSize);
+  // Seçili varyanı bul - renk ve bedene göre
+  const selectedVariant = product?.variants?.find(
+    (v) => v.size === selectedSize && v.colorName === selectedColor
+  );
   const stockLevel = selectedVariant ? selectedVariant.stock : 0;
+
+  // Renk seçimine göre bedenleri filtrele
+  const filteredVariants = getFilteredSizes();
 
   return (
     <main>
@@ -264,41 +700,50 @@ export default function ProductDetailPage() {
                 )}
               </div>
 
-              {/* Renk Seçenekleri - API'den uygun şekilde gelmediği için şimdilik varsayılan renkle devam */}
+              {/* Renk Seçenekleri */}
               <div className="product-option">
-                <h3 className="option-title">
-                  Renk:{" "}
-                  <span className="selected-option">
-                    {selectedVariant?.colorName || "Standart"}
-                  </span>
-                </h3>
+                <div className="option-header">
+                  <h3 className="option-title">
+                    Renk: 
+                    <span className="selected-option">
+                      {selectedColor || "Standart"}
+                    </span>
+                  </h3>
+                </div>
                 <div className="color-options">
-                  {Array.from(
+                  {product && Array.from(
                     new Set(product.variants.map((v) => v.colorName))
                   ).map((color) => {
                     const colorVariant = product.variants.find(
                       (v) => v.colorName === color
                     );
-                    const isSelected =
-                      colorVariant?.colorName === selectedVariant?.colorName;
+                    const isSelected = selectedColor === color;
+                    const isWhite = color.toLowerCase() === "beyaz" || 
+                                   colorVariant?.colorHex?.toLowerCase() === "#ffffff" || 
+                                   colorVariant?.colorHex?.toLowerCase() === "#fff";
 
                     return (
                       <div
                         key={color}
                         className={`color-option ${
                           isSelected ? "selected" : ""
-                        }`}
+                        } ${isWhite ? "white-color" : ""}`}
+                        onClick={() => handleColorSelect(color)}
                         title={color}
                       >
                         <span
                           className="color-swatch"
                           style={{
-                            backgroundColor:
-                              colorVariant?.colorHex || "#000000",
-                            border:
-                              color === "Beyaz" ? "1px solid #e0e0e0" : "none",
+                            backgroundColor: colorVariant?.colorHex || "#000000",
                           }}
                         ></span>
+                        {isSelected && (
+                          <span className="color-selected-indicator">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+                            </svg>
+                          </span>
+                        )}
                       </div>
                     );
                   })}
@@ -333,7 +778,7 @@ export default function ProductDetailPage() {
                 </div>
 
                 <div className="size-options">
-                  {product.variants.map((variant) => {
+                  {filteredVariants.map((variant) => {
                     const isSelected = selectedSize === variant.size;
                     const isDisabled = variant.stock <= 0;
 
@@ -669,7 +1114,7 @@ export default function ProductDetailPage() {
         </div>
       )}
 
-      {/* Benzer Ürünler - Bu kısmı daha sonra API'den gelen benzer ürünlerle dolduracağız */}
+      {/* Benzer Ürünler */}
       <section className="section similar-products-section">
         <div className="container">
           <h2 className="section-title">BENZER ÜRÜNLER</h2>
@@ -682,71 +1127,489 @@ export default function ProductDetailPage() {
           ) : similarProducts.length === 0 ? (
             <p style={{ textAlign: "center" }}>Benzer ürün bulunamadı.</p>
           ) : (
-            <div className="products-grid">
-              {similarProducts.map((similarProduct) => (
-                <Link
-                  key={similarProduct.id || similarProduct._id}
-                  href={`/urunler/${similarProduct.slug || similarProduct.id}`}
-                  className="product"
-                >
-                  <div className="product-image-container">
-                    <img
-                      src={
-                        similarProduct.images &&
-                        similarProduct.images.length > 0
-                          ? similarProduct.images[0].url
-                          : `https://placehold.co/800x1100/000000/FFFFFF/png?text=DOVL`
-                      }
-                      alt={similarProduct.name}
-                      className="product-image"
+            <div className="products-carousel">
+              <Swiper
+                modules={[Navigation, Pagination]}
+                spaceBetween={20}
+                slidesPerView={4}
+                navigation
+                pagination={{ clickable: true }}
+                breakpoints={{
+                  320: { slidesPerView: 1, spaceBetween: 10 },
+                  640: { slidesPerView: 2, spaceBetween: 15 },
+                  768: { slidesPerView: 3, spaceBetween: 15 },
+                  1024: { slidesPerView: 4, spaceBetween: 20 },
+                }}
+              >
+                {similarProducts.map((similarProduct) => (
+                  <SwiperSlide key={similarProduct.id || similarProduct._id}>
+                    <ProductCard 
+                      product={similarProduct} 
+                      onQuickView={openQuickView}
                     />
-
-                    <div className="product-tags">
-                      {similarProduct.salePrice && (
-                        <span className="product-tag product-tag-discount">
-                          {Math.round(
-                            (1 -
-                              similarProduct.salePrice / similarProduct.price) *
-                              100
-                          )}
-                          %
-                        </span>
-                      )}
-
-                      {similarProduct.isNew && (
-                        <span className="product-tag product-tag-new">
-                          YENİ
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="product-quick-view">HIZLI İNCELE</div>
-                  </div>
-
-                  <h3 className="product-name">{similarProduct.name}</h3>
-
-                  <div className="product-price">
-                    {similarProduct.salePrice ? (
-                      <>
-                        <span className="product-price-original">
-                          {similarProduct.price.toFixed(2)}TL
-                        </span>
-                        <span className="product-price-current">
-                          {similarProduct.salePrice.toFixed(2)}TL
-                        </span>
-                      </>
-                    ) : (
-                      <span className="product-price-current">
-                        {similarProduct.price.toFixed(2)}TL
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              ))}
+                  </SwiperSlide>
+                ))}
+              </Swiper>
             </div>
           )}
         </div>
       </section>
+
+      {/* QuickView Modal */}
+      <AnimatePresence>
+        {quickViewOpen && selectedQuickProduct && (
+          <QuickViewModal
+            product={selectedQuickProduct}
+            isOpen={quickViewOpen}
+            onClose={closeQuickView}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Hızlı İnceleme stil kuralları */}
+      <style jsx global>{`
+        .product-card-container {
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .product-image-container {
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .product-quick-view {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background-color: rgba(0, 0, 0, 0.7);
+          color: white;
+          text-align: center;
+          padding: 10px 0;
+          transform: translateY(100%);
+          transition: transform 0.3s ease;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 500;
+          letter-spacing: 1px;
+          z-index: 10;
+        }
+        
+        .product-image-container:hover .product-quick-view {
+          transform: translateY(0);
+        }
+        
+        /* Hover davranışını değiştir */
+        .product-quick-view:hover {
+          background-color: rgba(0, 0, 0, 0.85);
+        }
+        
+        /* Hızlı İnceleme Modal Stilleri */
+        .quick-view-modal {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.5);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 1000;
+          padding: 20px;
+        }
+        
+        .quick-view-content {
+          background: white;
+          max-width: 1000px;
+          width: 90%;
+          max-height: 90vh;
+          overflow-y: auto;
+          position: relative;
+          padding: 25px;
+          border-radius: 8px;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .quick-view-close {
+          position: absolute;
+          top: 15px;
+          right: 15px;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          z-index: 10;
+        }
+        
+        .quick-view-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 30px;
+        }
+        
+        @media (max-width: 768px) {
+          .quick-view-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+        
+        .quick-view-images {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .main-image {
+          width: 100%;
+          margin-bottom: 15px;
+        }
+        
+        .main-image img {
+          width: 100%;
+          height: auto;
+          object-fit: cover;
+        }
+        
+        .image-thumbnails {
+          display: flex;
+          gap: 10px;
+        }
+        
+        .image-thumbnail {
+          width: 70px;
+          height: 70px;
+          cursor: pointer;
+          border: 2px solid transparent;
+        }
+        
+        .image-thumbnail.active {
+          border-color: #333;
+        }
+        
+        .image-thumbnail img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        
+        .quick-view-details {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .quick-view-title {
+          font-size: 24px;
+          font-weight: 500;
+          margin-bottom: 15px;
+        }
+        
+        .quick-view-price {
+          margin-bottom: 15px;
+          font-size: 18px;
+        }
+        
+        .price-original {
+          text-decoration: line-through;
+          color: #999;
+          margin-right: 10px;
+        }
+        
+        .price-current {
+          font-weight: 600;
+          color: #000;
+        }
+        
+        .quick-view-description {
+          margin-bottom: 20px;
+          color: #555;
+          line-height: 1.5;
+        }
+        
+        .quick-view-sizes h3,
+        .quick-view-quantity h3 {
+          margin-bottom: 10px;
+          font-size: 16px;
+          font-weight: 500;
+        }
+        
+        .size-options {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-bottom: 20px;
+        }
+        
+        .size-option {
+          padding: 8px 16px;
+          min-width: 45px;
+          text-align: center;
+          border: 1px solid #ddd;
+          background: white;
+          cursor: pointer;
+          border-radius: 2px;
+          font-size: 14px;
+          transition: all 0.2s ease;
+        }
+        
+        .size-option:hover:not(.disabled) {
+          border-color: #888;
+        }
+        
+        .size-option.selected {
+          border-color: #000;
+          background: #000;
+          color: white;
+        }
+        
+        .size-option.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          text-decoration: line-through;
+        }
+        
+        .quantity-selector {
+          display: flex;
+          align-items: center;
+          margin-bottom: 20px;
+        }
+        
+        .quantity-button {
+          width: 35px;
+          height: 35px;
+          background: #f5f5f5;
+          border: 1px solid #ddd;
+          font-size: 18px;
+          cursor: pointer;
+        }
+        
+        .quantity-input {
+          width: 50px;
+          height: 35px;
+          border: 1px solid #ddd;
+          text-align: center;
+          margin: 0 5px;
+        }
+        
+        .quick-view-message {
+          padding: 10px;
+          margin-bottom: 20px;
+          border-radius: 4px;
+        }
+        
+        .quick-view-message.error {
+          background-color: #fff0f0;
+          color: #e53e3e;
+          border: 1px solid #f5b7b7;
+        }
+        
+        .quick-view-message.success {
+          background-color: #f0fff4;
+          color: #38a169;
+          border: 1px solid #b7f5c6;
+        }
+        
+        .quick-view-actions {
+          display: flex;
+          gap: 15px;
+        }
+        
+        .add-to-cart-button {
+          flex: 1;
+          padding: 12px 20px;
+          background-color: #000;
+          color: white;
+          border: none;
+          cursor: pointer;
+          font-weight: 500;
+          letter-spacing: 1px;
+          transition: background-color 0.3s ease;
+        }
+        
+        .add-to-cart-button:hover {
+          background-color: #333;
+        }
+        
+        .view-details-button {
+          flex: 1;
+          padding: 12px 20px;
+          background-color: white;
+          color: #000;
+          border: 1px solid #000;
+          text-align: center;
+          font-weight: 500;
+          letter-spacing: 1px;
+          transition: all 0.3s ease;
+        }
+        
+        .view-details-button:hover {
+          background-color: #f5f5f5;
+        }
+
+        .option-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 16px;
+        }
+        
+        .option-title {
+          font-size: 16px;
+          font-weight: 600;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        
+        .selected-option {
+          font-weight: 400;
+          color: #666;
+          padding-left: 5px;
+        }
+        
+        .color-options {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+        
+        .color-option {
+          width: 40px;
+          height: 40px;
+          border-radius: 4px;
+          cursor: pointer;
+          position: relative;
+          padding: 0;
+          background-color: #fff;
+          border: 2px solid #e5e5e5;
+          transition: all 0.2s ease;
+          overflow: hidden;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
+        
+        .color-option.selected {
+          border: 2px solid #000;
+          transform: translateY(-1px);
+          box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        
+        .color-option:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        
+        .color-swatch {
+          display: block;
+          width: 100%;
+          height: 100%;
+          border-radius: 0;
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+          background-size: cover;
+          background-position: center;
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+        }
+        
+        .color-selected-indicator {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: white;
+          text-shadow: 0 0 2px rgba(0,0,0,0.5);
+          filter: drop-shadow(0px 0px 1px rgba(0,0,0,0.3));
+        }
+
+        .size-guide-button {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          background: transparent;
+          border: none;
+          font-size: 14px;
+          color: #666;
+          cursor: pointer;
+          padding: 0;
+        }
+        
+        .size-guide-button:hover {
+          color: #000;
+          text-decoration: underline;
+        }
+
+        .color-option.white-color {
+          background: #f9f9f9;
+          border: 2px solid #e0e0e0;
+        }
+        
+        .color-option.white-color.selected {
+          border: 2px solid #000;
+        }
+        
+        .color-option.white-color .color-selected-indicator {
+          color: #000;
+          text-shadow: none;
+        }
+
+        /* Swiper Carousel Stilleri */
+        .products-carousel {
+          position: relative;
+          margin: 0 -10px 40px;
+          padding: 0 10px;
+        }
+        
+        .products-carousel .swiper-button-next,
+        .products-carousel .swiper-button-prev {
+          color: #000;
+          background: rgba(255, 255, 255, 0.8);
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .products-carousel .swiper-button-next:after,
+        .products-carousel .swiper-button-prev:after {
+          font-size: 16px;
+          font-weight: bold;
+        }
+        
+        .products-carousel .swiper-button-disabled {
+          opacity: 0.35;
+        }
+        
+        .products-carousel .swiper-pagination {
+          bottom: -30px;
+        }
+        
+        .products-carousel .swiper-pagination-bullet {
+          width: 8px;
+          height: 8px;
+        }
+        
+        .products-carousel .swiper-pagination-bullet-active {
+          background: #000;
+        }
+        
+        @media (max-width: 768px) {
+          .products-carousel .swiper-button-next,
+          .products-carousel .swiper-button-prev {
+            width: 30px;
+            height: 30px;
+          }
+          
+          .products-carousel .swiper-button-next:after,
+          .products-carousel .swiper-button-prev:after {
+            font-size: 14px;
+          }
+        }
+      `}</style>
     </main>
   );
 }

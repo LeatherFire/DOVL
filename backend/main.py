@@ -14,7 +14,7 @@ import pymongo
 import traceback # Geliştirme için traceback
 
 # --- Rotaları Import Etme ---
-from routers import auth, users, products, categories, orders, campaigns, cart
+from routers import auth, users, products, categories, orders, campaigns, cart, favorites, addresses
 
 # Ömür Döngüsü Yöneticisi
 @asynccontextmanager
@@ -97,6 +97,8 @@ app.include_router(categories.router, prefix="/categories", tags=["Categories"])
 app.include_router(orders.router, prefix="/orders", tags=["Orders"])
 app.include_router(campaigns.router, prefix="/campaigns", tags=["Campaigns"])
 app.include_router(cart.router, prefix="/cart", tags=["Shopping Cart"])
+app.include_router(favorites.router, prefix="/favorites", tags=["Favorites"])
+app.include_router(addresses.router, prefix="/addresses", tags=["Addresses"])
 
 # Bilgilendirme Logları
 print("="*50)
